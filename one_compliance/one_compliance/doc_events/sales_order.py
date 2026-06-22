@@ -645,9 +645,15 @@ def create_opportunity():
 def set_compliance_fields(doc, method):
 	"""
 	For each item , this function fetches the related compliance category 
-	and subcategory 
+	and subcategory. Also ensures delivery_date is set.
 	"""
+	if not doc.delivery_date:
+		doc.delivery_date = doc.transaction_date
+
 	for item in doc.items:
+		if not item.delivery_date:
+			item.delivery_date = doc.delivery_date
+
 		if item.item_code:
 			subcat =  frappe.db.get_value(
 				"Compliance Sub Category",
