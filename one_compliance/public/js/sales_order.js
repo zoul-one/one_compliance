@@ -25,11 +25,12 @@ frappe.ui.form.on('Sales Order', {
 				create_project_from_sales_order(frm);
 			});
 		}
-		if (frm.is_new()) {
-			frm.set_value('delivery_date', frappe.datetime.get_today());
+		if (frm.is_new() && !frm.doc.delivery_date) {
+			frm.set_value('delivery_date', frm.doc.transaction_date || frappe.datetime.get_today());
 		}
 		setTimeout(() => {
-			frm.fields_dict.items.grid.toggle_reqd('delivery_date');
+			frm.toggle_reqd('delivery_date', false);
+			frm.fields_dict.items.grid.toggle_reqd('delivery_date', false);
 
 			frm.remove_custom_button('Pick List', 'Create');
 			frm.remove_custom_button('Delivery Note', 'Create');
@@ -58,9 +59,12 @@ frappe.ui.form.on('Sales Order', {
 		make_is_outsource_service_read_only(frm);
 	},
 
-    transaction_date: function (frm) {
-        set_assign_to_employee_filter(frm);
-    }
+	transaction_date: function (frm) {
+		set_assign_to_employee_filter(frm);
+		if (frm.doc.transaction_date) {
+			frm.set_value('delivery_date', frm.doc.transaction_date);
+		}
+	},
 });
 
 let create_project_from_sales_order = function (frm) {
