@@ -593,6 +593,7 @@ function payment_entry_dialog(task_id, payable_amount, mode_of_payment, referenc
 				label: __("User Remark"),
 				fieldname: "user_remark",
 				fieldtype: "Small Text",
+				reqd: 1,
 				default: user_remark,
 			},
 		],

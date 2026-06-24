@@ -47,7 +47,8 @@
    "fieldname": "user_remark",
    "fieldtype": "Small Text",
    "in_list_view": 1,
-   "label": "User Remark"
+   "label": "User Remark",
+   "reqd": 1
   },
   {
    "fieldname": "journal_entry",
