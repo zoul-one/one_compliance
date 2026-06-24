@@ -44,7 +44,7 @@ def create_project_on_submit(doc, method):
 			assign_to.append(employee_name.name)
 			assign_to_str = json.dumps(assign_to)
 		for item in doc.items:
-			create_project_from_sales_order(doc.name, doc.custom_expected_start_date, item.item_code, doc.custom_priority, assign_to_str, doc.custom_expected_end_date, custom_instructions=item.custom_instructions)
+			create_project_from_sales_order(doc.name, doc.custom_expected_start_date, item.item_code, doc.custom_priority, assign_to_str, doc.custom_expected_end_date, custom_instructions=item.custom_instructions, so_item_name=item.name)
 
 @frappe.whitelist()
 def get_compliance_subcategory(item_code):
@@ -57,7 +57,7 @@ def get_compliance_subcategory(item_code):
 	}
 
 @frappe.whitelist()
-def create_project_from_sales_order(sales_order, start_date, item_code, priority, assign_to=None, expected_end_date=None, remark=None, custom_instructions=None):
+def create_project_from_sales_order(sales_order, start_date, item_code, priority, assign_to=None, expected_end_date=None, remark=None, custom_instructions=None, so_item_name=None):
 	"""Create project from sales order with tasks based on project template"""
 	employees = json.loads(assign_to) if assign_to else []
 	
@@ -92,7 +92,8 @@ def create_project_from_sales_order(sales_order, start_date, item_code, priority
 		expected_end_date, 
 		priority, 
 		remark, 
-		custom_instructions
+		custom_instructions,
+		so_item_name=so_item_name
 	)
 	
 	# Assign to head of department
@@ -165,7 +166,7 @@ def _get_naming_info(start_date, compliance_sub_category):
 
 
 def _create_project(sales_order_doc, compliance_sub_category, project_template_doc, 
-					start_date, expected_end_date, priority, remark, custom_instructions):
+					start_date, expected_end_date, priority, remark, custom_instructions, so_item_name=None):
 	"""Create and save project document"""
 	naming = _get_naming_info(start_date, compliance_sub_category)
 	
@@ -210,6 +211,14 @@ def _create_project(sales_order_doc, compliance_sub_category, project_template_d
 		project.expected_end_date = add_days(start_date, project_template_doc.custom_project_duration)
 	
 	project.save(ignore_permissions=True)
+
+	if sales_order_doc.name and so_item_name:
+		frappe.db.set_value("Sales Order Item", so_item_name, {
+			"project": project.name,
+			"description": project.custom_project_service
+		})
+		frappe.db.commit()
+
 	return project
 
 
@@ -646,9 +655,14 @@ def set_compliance_fields(doc, method):
 	"""
 	For each item , this function fetches the related compliance category 
 	and subcategory. Also ensures delivery_date is set.
+	Populates the item description with the Project Service if a project is linked.
 	"""
 	if not doc.delivery_date:
 		doc.delivery_date = doc.transaction_date
+
+	project_service = None
+	if doc.project:
+		project_service = frappe.db.get_value("Project", doc.project, "custom_project_service")
 
 	for item in doc.items:
 		if not item.delivery_date:
@@ -664,6 +678,16 @@ def set_compliance_fields(doc, method):
 			if subcat:
 				item.custom_compliance_category     = subcat.compliance_category
 				item.custom_compliance_subcategory  = subcat.name
+
+		# Populate item description with Project Service
+		item_project = item.project or doc.project
+		if item_project:
+			current_project_service = project_service
+			if item.project and item.project != doc.project:
+				current_project_service = frappe.db.get_value("Project", item.project, "custom_project_service")
+
+			if current_project_service:
+				item.description = current_project_service
 
 @frappe.whitelist()
 def create_purchase_invoice(docname, items):

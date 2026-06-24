@@ -180,6 +180,7 @@ let create_project_from_sales_order = function (frm) {
 							priority: values.priority,
 							remark: values.remark,
 							assign_to: values.assign_to,
+							so_item_name: item.name,
 						},
 						callback: function (r) {
 							if (r.message) {

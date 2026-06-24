@@ -545,7 +545,8 @@ def create_sales_order(project, rate, sub_category_doc, payment_terms=None, subm
 		'item_name' : sub_category_doc.sub_category,
 		'rate' : rate,
 		'qty' : 1,
-		'description' : project.custom_project_service
+		'description' : project.custom_project_service,
+		'project' : project.name
 	})
 	new_sales_order.insert(ignore_permissions=True, ignore_mandatory=True)
 	new_sales_order.submit()
