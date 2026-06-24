@@ -2,6 +2,15 @@ import frappe
 from frappe import _
 from frappe.model.naming import make_autoname
 
+def validate(doc, method=None):
+	"""
+	Sets the Remarks field of Sales Invoice from the custom_project_service of its Project.
+	"""
+	if doc.project:
+		project_service = frappe.db.get_value("Project", doc.project, "custom_project_service")
+		if project_service:
+			doc.remarks = project_service
+
 def sales_invoice_on_submit(doc, method):
 	for item in doc.items:
 		if item.sales_order:
