@@ -48,6 +48,7 @@ frappe.ui.form.on('Sales Order', {
 		apply_filter_to_supplier_purchase_invoice(frm, frm.doc.supplier);
 		add_pi_button(frm);
 		make_is_outsource_service_read_only(frm);
+		add_sales_invoice_button(frm);
 	},
 
 	supplier: (frm) => {
@@ -437,4 +438,39 @@ function set_assign_to_employee_filter(frm) {
             }
         };
     });
+}
+
+function add_sales_invoice_button(frm) {
+	if (frm.doc.docstatus === 1 && !frm.doc.custom_is_rework) {
+		setTimeout(() => {
+			frm.remove_custom_button(__('Sales Invoice'), __('Create'));
+			frm.add_custom_button(__('Sales Invoice'), () => {
+				frappe.call({
+					method: 'one_compliance.one_compliance.doc_events.sales_order.check_if_sales_invoice_exists',
+					args: {
+						sales_order: frm.doc.name
+					},
+					callback: function (r) {
+						if (r.message) {
+							frappe.confirm(
+								__('Already one sales invoice is created against the sales order, do you want to create again?'),
+								() => {
+									make_sales_invoice(frm);
+								}
+							);
+						} else {
+							make_sales_invoice(frm);
+						}
+					}
+				});
+			}, __('Create'));
+		}, 600);
+	}
+}
+
+function make_sales_invoice(frm) {
+	frappe.model.open_mapped_doc({
+		method: 'erpnext.selling.doctype.sales_order.sales_order.make_sales_invoice',
+		frm: frm
+	});
 }
