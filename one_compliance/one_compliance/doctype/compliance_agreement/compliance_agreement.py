@@ -681,6 +681,8 @@ def create_sales_orders_from_compliance_agreements(posting_date=today()):
 							"item_name": item_name,
 							"qty": 1,
 							"rate": detail.rate or 0,
+							"description": project.custom_project_service if project else item_name,
+							"project": project.name if project else None
 						})
 
 						so.insert(ignore_permissions=True)
@@ -1067,6 +1069,8 @@ def create_sales_order_and_project_from_popup(
 		"item_name": item_name,
 		"qty": 1,
 		"rate": rate,
+		"description": project.custom_project_service if project else item_name,
+		"project": project.name if project else None
 	})
 
 	so.insert(ignore_permissions=True)
