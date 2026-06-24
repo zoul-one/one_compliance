@@ -739,3 +739,14 @@ def set_invoice_generation_date(doc, method=None):
 				"invoice_generation_date",
 				today()
 			)
+
+
+@frappe.whitelist()
+def check_if_sales_invoice_exists(sales_order):
+	"""
+	Check if any non-cancelled Sales Invoice is linked to the given Sales Order
+	"""
+	return frappe.db.count("Sales Invoice Item", {
+		"sales_order": sales_order,
+		"docstatus": ["<", 2]
+	}) > 0
