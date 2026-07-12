@@ -12,7 +12,6 @@ def get_task(status=None, task=None, project=None, customer=None, department=Non
 		Retrieve a filtered, paginated list of tasks from the Task Management Tool.
 	"""
 	current_user = frappe.session.user
-	roles = frappe.get_roles(current_user)
 
 	conditions = []
 	values = {}
@@ -62,7 +61,7 @@ def get_task(status=None, task=None, project=None, customer=None, department=Non
 		conditions.append("t.exp_end_date < %(to_date)s")
 		values["to_date"] = to_date
 
-	if current_user != "Administrator" and "Executive" in roles:
+	if current_user != "Administrator":
 		conditions.append("(t.readiness_status = 'Ready' OR t.readiness_status IS NULL OR t.readiness_status = '')")
 
 	where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
