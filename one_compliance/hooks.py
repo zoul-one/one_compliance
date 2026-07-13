@@ -197,7 +197,10 @@ doc_events = {
 		"on_change": "one_compliance.one_compliance.doc_events.purchase_invoice.update_sales_order",
 		"on_submit": "one_compliance.one_compliance.doc_events.purchase_invoice.update_commission_status_in_customer",
 		"on_cancel": "one_compliance.one_compliance.doc_events.purchase_invoice.update_commission_status_in_customer",
-	}
+	},
+	"Job Opening": {
+		"after_insert": "one_compliance.one_compliance.doc_events.job_opening.generate_qr_for_job"
+	},
 }	
 
 # Scheduled Tasks
