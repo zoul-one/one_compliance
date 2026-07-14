@@ -6,7 +6,6 @@ def get_job_opening_property_setters():
 		{
 			"doc_type": "Job Opening",
 			"doctype_or_field": "DocType",
-			"field_name": None,
 			"property": "image_field",
 			"property_type": "Data",
 			"value": "qr_scan_to_apply",
