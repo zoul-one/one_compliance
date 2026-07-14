@@ -305,8 +305,7 @@ function initialize_task_actions(page, active_timers = null) {
 			args: {
 				task: task_name,
 				project: project_name || "",
-				subject: task_subject || "",
-				start_time: current_time
+				subject: task_subject || ""
 			},
 			callback: (r) => {
 				if (r.message) {
