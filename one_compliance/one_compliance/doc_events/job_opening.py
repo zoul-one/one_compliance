@@ -53,6 +53,7 @@ def generate_qr_for_job(doc, method=None):
 		"Job Opening",
 		doc.name,
 		is_private=0,
+		df="qr_scan_to_apply",
 	)
 
 	frappe.db.set_value(
