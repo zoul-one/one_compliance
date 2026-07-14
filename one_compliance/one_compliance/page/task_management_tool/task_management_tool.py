@@ -12,6 +12,7 @@ def get_task(status=None, task=None, project=None, customer=None, department=Non
 		Retrieve a filtered, paginated list of tasks from the Task Management Tool.
 	"""
 	current_user = frappe.session.user
+	roles = frappe.get_roles(current_user)
 
 	conditions = []
 	values = {}
@@ -61,7 +62,7 @@ def get_task(status=None, task=None, project=None, customer=None, department=Non
 		conditions.append("t.exp_end_date < %(to_date)s")
 		values["to_date"] = to_date
 
-	if current_user != "Administrator":
+	if current_user != "Administrator" and "Executive" in roles:
 		conditions.append("(t.readiness_status = 'Ready' OR t.readiness_status IS NULL OR t.readiness_status = '')")
 
 	where_clause = "WHERE " + " AND ".join(conditions) if conditions else ""
@@ -282,7 +283,7 @@ def get_icon_hidden_status():
 	return data
 
 @frappe.whitelist()
-def start_active_timer(task, project, subject, start_time, is_ad_hoc_event=0):
+def start_active_timer(task, project, subject, is_ad_hoc_event=0):
 	"""
 		Start a timer for a specific task, ensuring no overlapping timers for the same user.
 	"""
@@ -299,12 +300,12 @@ def start_active_timer(task, project, subject, start_time, is_ad_hoc_event=0):
 			frappe.throw(_("No permission to access this task"))
 	if project and not frappe.db.exists("Project", project):
 		frappe.throw(_("Project {0} not found").format(project))
-	try:
-		start_dt = frappe.utils.get_datetime(start_time)
-		if start_dt > frappe.utils.now_datetime():
-			frappe.throw(_("Start time cannot be in the future"))
-	except Exception:
-		frappe.throw(_("Invalid start_time format"))
+	# try:
+	# 	start_dt = frappe.utils.get_datetime(start_time)
+	# 	if start_dt > frappe.utils.now_datetime():
+	# 		frappe.throw(_("Start time cannot be in the future"))
+	# except Exception:
+	# 	frappe.throw(_("Invalid start_time format"))
 
 	if not _is_time_overlap_ignored():
 		existing_timer = frappe.db.sql("""
@@ -336,7 +337,7 @@ def start_active_timer(task, project, subject, start_time, is_ad_hoc_event=0):
 	
 	doc.project = project
 	doc.subject = subject
-	doc.start_time = start_time
+	doc.start_time = frappe.utils.now_datetime()
 	doc.save(ignore_permissions=True)
 	frappe.db.commit() 
 
