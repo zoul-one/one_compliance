@@ -324,7 +324,6 @@
 							task: '',
 							project: '',
 							subject: 'Ad-hoc Event',
-							start_time: start_time,
 							is_ad_hoc_event: 1,
 						},
 						callback: function (r) {
