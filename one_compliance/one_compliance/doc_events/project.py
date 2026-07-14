@@ -282,6 +282,7 @@ def create_commission_purchase_invoice(doc, method=None):
 	if not rate:
 		return
 	pi = frappe.new_doc("Purchase Invoice")
+	pi.company = doc.company
 	pi.supplier = customer.supplier
 	pi.is_commission_invoice = 1
 	pi.customer = customer.name
@@ -293,6 +294,7 @@ def create_commission_purchase_invoice(doc, method=None):
 		"rate": rate
 	})
 
+	pi.set_missing_values()
 	pi.insert(ignore_permissions=True)
 	frappe.get_doc({
 		"doctype": "Reference Detail",
