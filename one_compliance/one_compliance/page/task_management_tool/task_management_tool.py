@@ -12,7 +12,6 @@ def get_task(status=None, task=None, project=None, customer=None, department=Non
 		Retrieve a filtered, paginated list of tasks from the Task Management Tool.
 	"""
 	current_user = frappe.session.user
-	roles = frappe.get_roles(current_user)
 
 	conditions = []
 	values = {}
