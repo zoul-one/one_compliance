@@ -48,6 +48,7 @@ from one_compliance.custom.property_setter.sales_order import get_sales_order_pr
 from one_compliance.custom.property_setter.task import get_task_property_setters
 from one_compliance.custom.property_setter.timesheet_detail import get_timesheet_detail_property_setters
 from one_compliance.custom.property_setter.timesheet import get_timesheet_property_setters
+from one_compliance.custom.property_setter.job_opening import get_job_opening_property_setters
 
 # Fixture method imports
 from one_compliance.custom.fixtures.category_type import category_type_fixtures
@@ -181,6 +182,7 @@ def get_property_setters():
 	property_setters.extend(get_task_property_setters())
 	property_setters.extend(get_timesheet_detail_property_setters())
 	property_setters.extend(get_timesheet_property_setters())
+	property_setters.extend(get_job_opening_property_setters())
 	return property_setters
 
 def insert_docs(doc_list, doctype=None):
