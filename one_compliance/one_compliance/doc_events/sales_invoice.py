@@ -50,7 +50,7 @@ def autoname(doc, method=None):
 			frappe.throw(_("Naming Series is not created"))
 
 @frappe.whitelist()
-def create_tds_journal_entry(sales_invoice, customer, tds_account, tds_amount):
+def create_tds_journal_entry(sales_invoice, customer, tds_account, tds_amount, user_remark=None):
 	sales_invoice_doc = frappe.get_doc('Sales Invoice', sales_invoice)
 	tds_amount = float(tds_amount)
 	if tds_amount <= 0:
@@ -59,7 +59,11 @@ def create_tds_journal_entry(sales_invoice, customer, tds_account, tds_amount):
 	je.voucher_type = 'Journal Entry'
 	je.posting_date = sales_invoice_doc.posting_date
 	je.company = sales_invoice_doc.company
-	je.remark = f'TDS Booking for Sales Invoice {sales_invoice}'
+	je.user_remark = user_remark
+	if user_remark:
+		je.remark = f'TDS Booking for Sales Invoice {sales_invoice} - {user_remark}'
+	else:
+		je.remark = f'TDS Booking for Sales Invoice {sales_invoice}'
 	je.append('accounts', {
 		'account': sales_invoice_doc.debit_to,
 		'party_type': 'Customer',
@@ -67,12 +71,12 @@ def create_tds_journal_entry(sales_invoice, customer, tds_account, tds_amount):
 		'debit_in_account_currency': 0.0,
 		'credit_in_account_currency': tds_amount,
 		'reference_type': 'Sales Invoice',
-		'reference_name': sales_invoice
+		'reference_name': sales_invoice,
 	})
 	je.append('accounts', {
 		'account': tds_account,
 		'debit_in_account_currency': tds_amount,
-		'credit_in_account_currency': 0.0
+		'credit_in_account_currency': 0.0,
 	})
 	je.save()
 	sales_invoice_doc.paid_amount = tds_amount
