@@ -490,14 +490,6 @@ def make_sales_invoice(doc, method):
 									frappe.db.set_value("Sales Order", sales_order, "invoice_generation_date", today())
 							elif sales_order_status == "Pre-Invoice":
 								frappe.db.set_value("Sales Order", sales_order, "workflow_state", "Invoiced")
-						else:
-							payment_terms = None
-							rate = None
-							if frappe.db.exists('Compliance Agreement', project.compliance_agreement):
-								payment_terms = frappe.db.get_value('Compliance Agreement', project.compliance_agreement,'default_payment_terms_template')
-								rate = get_rate_from_compliance_agreement(project.compliance_agreement, project.compliance_sub_category)
-							rate = rate if rate else sub_category_doc.rate
-							create_sales_order(project, rate, sub_category_doc, payment_terms)
 
 @frappe.whitelist()
 def create_sales_invoice(project, payment_terms, rate, sub_category_doc):
