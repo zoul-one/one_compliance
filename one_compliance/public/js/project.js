@@ -2,9 +2,11 @@ frappe.ui.form.on('Project', {
 
 	onload(frm) {
 		load_project_tasks(frm);
+		toggle_is_billable_visibility(frm);
 	},
 
 	refresh(frm) {
+	toggle_is_billable_visibility(frm);
 	if (!frm.is_new()) {
 		setTimeout(() => {
 		frm.remove_custom_button('Duplicate Project with Tasks', 'Actions');
@@ -102,6 +104,18 @@ frappe.ui.form.on('Project', {
 	}
 
 	load_project_tasks(frm);
+	},
+
+	compliance_sub_category(frm) {
+		if (frm.doc.compliance_sub_category) {
+			frappe.db.get_value('Compliance Sub Category', frm.doc.compliance_sub_category, 'is_billable', (r) => {
+				if (r && r.is_billable !== undefined) {
+					frm.set_value('custom_is_billable', r.is_billable);
+				}
+			});
+		} else {
+			frm.set_value('custom_is_billable', 0);
+		}
 	},
 });
 
@@ -403,4 +417,13 @@ function get_table_styles() {
 			}
 		</style>
 	`;
+}
+
+function toggle_is_billable_visibility(frm) {
+	let roles = frappe.user_roles;
+	if (roles.includes('Accounts Manager') || roles.includes('Director')) {
+		frm.toggle_display('custom_is_billable', true);
+	} else {
+		frm.toggle_display('custom_is_billable', false);
+	}
 }

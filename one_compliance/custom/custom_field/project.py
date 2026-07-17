@@ -129,6 +129,16 @@ def get_project_custom_fields():
 				"insert_after": "custom_is_internal",
 			},
 			{
+				"fetch_from": "compliance_sub_category.is_billable",
+				"fetch_if_empty": 0,
+				"fieldname": "custom_is_billable",
+				"fieldtype": "Check",
+				"insert_after": "is_premium",
+				"label": "Is Billable",
+				"read_only": 1,
+				"hidden": 1,
+			},
+			{
 				"fieldname": "project_dashboard_html",
 				"fieldtype": "HTML",
 				"label": "",

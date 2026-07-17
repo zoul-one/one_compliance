@@ -14,6 +14,20 @@ from one_compliance.one_compliance.utils import (
 )
 
 
+def validate(doc, method=None):
+	set_is_billable(doc)
+
+def set_is_billable(doc):
+	sub_cat = doc.compliance_sub_category
+	if not sub_cat and doc.project_template:
+		sub_cat = frappe.db.get_value("Project Template", doc.project_template, "compliance_sub_category")
+
+	if sub_cat:
+		is_billable = frappe.db.get_value("Compliance Sub Category", sub_cat, "is_billable")
+		doc.custom_is_billable = 1 if is_billable else 0
+	else:
+		doc.custom_is_billable = 0
+
 @frappe.whitelist()
 def project_on_update(doc, method):
 	is_not_rework = doc.sales_order and not frappe.db.get_value("Sales Order", doc.sales_order, "custom_is_rework")
