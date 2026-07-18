@@ -116,7 +116,7 @@ def set_status_to_overdue():
 
 
 @frappe.whitelist()
-def get_permission_query_conditions(user):
+def get_permission_query_conditions(user=None):
 	"""
 	Method used to set the permission to get the list of docs (Example: list view query)
 	Called from the permission_query_conditions of hooks for the DocType Issue
@@ -132,9 +132,10 @@ def get_permission_query_conditions(user):
 		return None
 
 	if "Manager" in user_roles or "Executive" in user_roles:
-		conditions = """(tabProject._assign like '%{user}%')""" \
-			.format(user=user)
-		return conditions
+		if frappe.db.has_column("Project", "_assign"):
+			return "(`tabProject`.`_assign` LIKE '%{}%')".format(user)
+		else:
+			return "1=0"
 	else:
 		return None
 
