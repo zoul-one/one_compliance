@@ -558,7 +558,7 @@ def update_task_status(task_id, status, completed_by, completed_on):
 	return True
 
 @frappe.whitelist()
-def get_permission_query_conditions(user):
+def get_permission_query_conditions(user=None):
 
 	if not user:
 		user = frappe.session.user
@@ -568,9 +568,10 @@ def get_permission_query_conditions(user):
 		return None
 
 	if "Manager" in user_roles or "Executive" in user_roles:
-		conditions = """(tabTask._assign like '%{user}%')""" \
-			.format(user=user)
-		return conditions
+		if frappe.db.has_column("Task", "_assign"):
+			return "(`tabTask`.`_assign` LIKE '%{}%')".format(user)
+		else:
+			return "1=0"
 	else:
 		return None
 
