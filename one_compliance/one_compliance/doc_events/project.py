@@ -1,7 +1,7 @@
 import frappe
 from frappe import _
 from frappe.email.doctype.notification.notification import get_context
-from frappe.utils import add_days, getdate, today
+from frappe.utils import add_days, getdate, today,add_months, cint, get_last_day
 from one_compliance.one_compliance.utils import create_todo
 from one_compliance.one_compliance.doc_events.task import (
 	create_sales_order,
@@ -12,7 +12,6 @@ from one_compliance.one_compliance.utils import (
 	create_project_completion_todos,
 	send_notification,
 )
-
 
 def validate(doc, method=None):
 	set_is_billable(doc)
@@ -323,3 +322,83 @@ def create_commission_purchase_invoice(doc, method=None):
 
 	if customer.one_time:
 		frappe.db.set_value("Customer", customer.name, "reference_completed", 1)
+
+def create_sales_order_after_project(doc, method=None):
+    """
+    Create Sales Order automatically after a Project is created.
+    Uses the same logic that was previously in the scheduler.
+    """
+
+    if not doc.compliance_agreement or not doc.compliance_sub_category:
+        return
+
+    # Prevent duplicate Sales Orders
+    if frappe.db.exists(
+        "Sales Order",
+        {
+            "project": doc.name
+        }
+    ):
+        return
+
+    agreement = frappe.get_doc("Compliance Agreement", doc.compliance_agreement)
+    sub_category = frappe.get_doc(
+        "Compliance Sub Category",
+        doc.compliance_sub_category
+    )
+
+    # Only create Sales Order for billable compliances
+    if not sub_category.is_billable:
+        return
+
+    transaction_date = doc.expected_start_date or frappe.utils.today()
+
+    # Duplicate check (same logic as scheduler)
+    if frappe.db.exists(
+        "Sales Order",
+        {
+            "compliance_agreement": agreement.name,
+            "compliance_sub_category": sub_category.name,
+            "transaction_date": transaction_date
+        }
+    ):
+        return
+
+    so = frappe.new_doc("Sales Order")
+    so.customer = agreement.customer
+    so.company = agreement.company
+    so.project = doc.name
+    so.compliance_agreement = agreement.name
+    so.compliance_sub_category = sub_category.name
+    so.transaction_date = transaction_date
+    so.delivery_date = transaction_date
+
+    if agreement.payment_terms_template:
+        so.payment_terms_template = agreement.payment_terms_template
+
+    description = (
+        doc.custom_project_service
+        if getattr(doc, "custom_project_service", None)
+        else frappe.db.get_value(
+            "Item",
+            sub_category.item_code,
+            "item_name"
+        )
+    )
+
+    so.append(
+        "items",
+        {
+            "item_code": sub_category.item_code,
+            "qty": 1,
+            "rate": sub_category.rate or 0,
+            "description": description,
+            "project": doc.name,
+        },
+    )
+
+    so.insert(ignore_permissions=True)
+    so.submit()
+
+    # Link Sales Order back to Project
+    frappe.db.set_value("Project", doc.name, "sales_order", so.name)
