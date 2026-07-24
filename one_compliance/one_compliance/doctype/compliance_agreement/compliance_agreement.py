@@ -30,12 +30,12 @@ class ComplianceAgreement(Document):
 
 	def on_submit(self):
 		self.update_compliance_agreement_status()
-		self.set_compliance_date()
+		# self.set_compliance_date()
 
 	def on_update_after_submit(self):
 		self.sign_validation()
 		self.update_compliance_agreement_status()
-		self.set_compliance_date()
+		# self.set_compliance_date()
 		self.validate_compliance_dates_on_table()
 
 	def validate_compliance_dates_on_table(self):
@@ -176,56 +176,6 @@ class ComplianceAgreement(Document):
 							compliance_category=sub.compliance_category or "",
 							compliance_date=project_date
 						)
-
-					project_name = frappe.db.get_value(
-						"Project",
-						{
-							"compliance_agreement": self.name,
-							"compliance_sub_category": sub.name
-						},
-						"name"
-					)
-
-					if sub.is_billable:
-						exists = frappe.db.exists(
-							"Sales Order",
-							{
-								"compliance_agreement": self.name,
-								"compliance_sub_category": sub.name,
-								"transaction_date": project_date
-							}
-						)
-
-						if not exists:
-							so = frappe.new_doc("Sales Order")
-							so.customer = self.customer
-							so.company = self.company
-							so.compliance_agreement = self.name
-							so.compliance_sub_category = sub.name
-							so.transaction_date = today_date
-							so.delivery_date = today_date
-
-							if self.default_payment_terms_template:
-								so.payment_terms_template = self.default_payment_terms_template
-
-							item_code = sub.item_code
-							item_name = frappe.db.get_value("Item", item_code, "item_name")
-							rate = sub.rate or 0
-
-							so.append("items", {
-								"item_code": item_code,
-								"item_name": item_name,
-								"qty": 1,
-								"rate": rate
-							})
-
-							so.insert(ignore_permissions=True)
-							so.submit()
-
-							if project_name:
-								frappe.db.set_value("Project", project_name, "sales_order", so.name)
-								frappe.db.set_value("Sales Order", so.name, "project", project_name)
-
 	def validate_agreement_dates(self):
 		if self.posting_date:
 			if getdate(self.posting_date) > getdate(today()):
@@ -653,67 +603,15 @@ def create_sales_orders_from_compliance_agreements(posting_date=today()):
 			else:
 				compliance_date = getdate(current_date)
 				next_compliance_date = None
-
-			# === Create Sales Order only if billable ===
-			if is_billable:
-				if not frappe.db.exists("Sales Order", {
-					"compliance_agreement": agreement.name,
-					"compliance_sub_category": sub_cat,
-					"transaction_date": current_date
-				}):
-					try:
-						item_name = frappe.db.get_value("Item", item_code, "item_name") if item_code else None
-						if not item_code:
-							continue
-
-						so = frappe.new_doc("Sales Order")
-						so.customer = agreement.customer
-						so.company = agreement.company
-						so.compliance_agreement = agreement.name
-						so.compliance_sub_category = sub_cat
-						so.transaction_date = current_date
-						so.delivery_date = current_date
-						if agreement.default_payment_terms_template:
-							so.payment_terms_template = agreement.default_payment_terms_template
-
-						so.append("items", {
-							"item_code": item_code,
-							"item_name": item_name,
-							"qty": 1,
-							"rate": detail.rate or 0,
-							"description": project.custom_project_service if project else item_name,
-							"project": project.name if project else None
-						})
-
-						so.insert(ignore_permissions=True)
-						so.submit()
-
-						if project:
-							project.db_set("sales_order", so.name)
-							so.db_set("project", project.name)
-
-						if compliance_date:
-							frappe.db.set_value(
-								"Compliance Category Details",
-								detail.name,
-								{
-									"compliance_date": compliance_date,
-									"next_compliance_date": next_compliance_date
-								}
-							)
-
-					except Exception:
-						frappe.log_error(frappe.get_traceback(), f"SO Creation Failed - {agreement.name}")
-			else:
-				if compliance_date:
-					frappe.db.set_value(
-					"Compliance Category Details",
-					detail.name,
-					{
-						"compliance_date": compliance_date,
-						"next_compliance_date": next_compliance_date
-					}
-				)
+			if compliance_date:
+				frappe.db.set_value(
+				"Compliance Category Details",
+				detail.name,
+				{
+					"compliance_date": compliance_date,
+					"next_compliance_date": next_compliance_date
+				}
+			)
 
 def create_project_from_template(sales_order, project_template, customer, company,
 								 compliance_sub_category, compliance_category_details_id,
