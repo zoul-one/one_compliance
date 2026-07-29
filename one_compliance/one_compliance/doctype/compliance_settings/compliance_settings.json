@@ -75,7 +75,10 @@
   "invoice_series_setup_section",
   "invoice_series",
   "document_details_tab",
-  "document_required"
+  "document_required",
+  "tgs_settings_tab",
+  "default_proposal_validity_in_days",
+  "default_project_creation_period_in_months"
  ],
  "fields": [
   {
@@ -478,12 +481,27 @@
    "label": "Service Item",
    "mandatory_depends_on": "eval:doc.enable_referral_commission == 1",
    "options": "Item"
+  },
+  {
+   "fieldname": "tgs_settings_tab",
+   "fieldtype": "Tab Break",
+   "label": "TGS Settings"
+  },
+  {
+   "fieldname": "default_project_creation_period_in_months",
+   "fieldtype": "Int",
+   "label": "Default Project Creation Period (In Months)"
+  },
+  {
+   "fieldname": "default_proposal_validity_in_days",
+   "fieldtype": "Int",
+   "label": "Default Proposal Validity (In Days)"
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-03-09 09:54:35.506504",
+ "modified": "2026-07-29 21:37:30.280485",
  "modified_by": "Administrator",
  "module": "One Compliance",
  "name": "Compliance Settings",
