@@ -12,10 +12,12 @@ from one_compliance.one_compliance.utils import (
 	create_project_completion_todos,
 	send_notification,
 )
-
-
 def validate(doc, method=None):
 	set_is_billable(doc)
+
+def after_insert(doc, method=None):
+	if not doc.sales_order and doc.custom_is_billable and doc.compliance_agreement:
+		create_sales_order_for_project(doc)
 
 def set_is_billable(doc):
 	sub_cat = doc.compliance_sub_category
@@ -44,6 +46,8 @@ def project_on_update(doc, method):
 
 	if is_not_rework:
 		update_sales_order_billing_instruction(doc.sales_order, doc.custom_billing_instruction)
+	if doc.status == 'Completed' and doc.custom_is_billable:
+		create_commission_purchase_invoice(doc)
 
 def update_sales_order_billing_instruction(sales_order, custom_billing_instruction):
 	"""
@@ -253,7 +257,7 @@ def get_project_tasks(project):
 		"tasks": tasks
 	}
 
-def create_commission_purchase_invoice(doc, method=None):
+def create_commission_purchase_invoice(doc):
 	"""
 	Creates a Purchase Invoice for referral commission when a Project is marked as Completed.
 	"""
@@ -323,3 +327,44 @@ def create_commission_purchase_invoice(doc, method=None):
 
 	if customer.one_time:
 		frappe.db.set_value("Customer", customer.name, "reference_completed", 1)
+
+def create_sales_order_for_project(doc):
+	try:
+		if doc.compliance_sub_category:
+			item_code = frappe.db.get_value("Compliance Sub Category", doc.compliance_sub_category, "item_code")
+			item_name = frappe.db.get_value("Item", item_code, "item_name") if item_code else None
+			if not item_code:
+				frappe.throw(_("Item Code not found for Compliance Sub Category: {0}").format(doc.compliance_sub_category))
+		rate, compliance_date = frappe.db.get_value(
+			"Compliance Category Details",
+			{
+				"parent": doc.compliance_agreement,
+				"compliance_sub_category": doc.compliance_sub_category,
+		},
+			["rate", "compliance_date"]
+		)
+		so = frappe.new_doc("Sales Order")
+		so.customer = doc.customer
+		so.company = doc.company
+		so.compliance_agreement = doc.compliance_agreement
+		so.compliance_sub_category = doc.compliance_sub_category
+		so.transaction_date = compliance_date
+		so.delivery_date = compliance_date
+		so.project = doc.name
+
+		so.append("items", {
+			"item_code": item_code,
+			"item_name": item_name,
+			"qty": 1,
+			"rate": rate or 0,
+			"description": doc.custom_project_service if doc.custom_project_service else item_name,
+			"project": doc.name if doc else None
+		})
+		so.set_missing_values()
+		so.insert(ignore_permissions=True)
+		so.submit()
+		doc.db_set("sales_order", so.name)
+
+
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), f"SO Creation Failed - {doc.name}")

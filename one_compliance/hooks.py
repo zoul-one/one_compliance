@@ -145,7 +145,7 @@ doc_events = {
 	'Project':{
 		'validate': 'one_compliance.one_compliance.doc_events.project.validate',
 		'on_update': 'one_compliance.one_compliance.doc_events.project.project_on_update',
-		'after_insert': 'one_compliance.one_compliance.doc_events.project.create_commission_purchase_invoice',
+		'after_insert': 'one_compliance.one_compliance.doc_events.project.after_insert',
 	},
 	'Customer':{
 		'on_update':[
