@@ -8,6 +8,24 @@ frappe.ui.form.on('Project Template', {
 		restrict_task_field(frm, 'premium_tasks');
 		clear_blank_rows(frm, ['tasks', 'premium_tasks']);
 	},
+	refresh(frm) {
+		if (frm.is_new() && frm.doc.compliance_sub_category && !frm.doc.__newname) {
+			frappe.db.get_value('Compliance Sub Category', frm.doc.compliance_sub_category, 'sub_category', (r) => {
+				if (r && r.sub_category) {
+					frm.set_value('__newname', r.sub_category);
+				}
+			});
+		}
+	},
+	compliance_sub_category(frm) {
+		if (frm.is_new() && frm.doc.compliance_sub_category) {
+			frappe.db.get_value('Compliance Sub Category', frm.doc.compliance_sub_category, 'sub_category', (r) => {
+				if (r && r.sub_category) {
+					frm.set_value('__newname', r.sub_category);
+				}
+			});
+		}
+	},
 	custom_add_tasks(frm) {
 		show_task_popup(frm, 'tasks');
 	},

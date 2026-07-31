@@ -8,6 +8,6 @@ def get_project_template_property_setters():
 			"doctype_or_field": "DocType",
 			"property": "field_order",
 			"property_type": "Data",
-			"value": '["project_type", "custom_project_duration", "column_break_igely", "compliance_category", "compliance_sub_category", "category_type", "section_break_e01k0", "tasks", "custom_documents_required", "description"]',
+			"value": '["project_type", "project_duration_minutes", "custom_project_duration", "column_break_igely", "compliance_category", "compliance_sub_category", "category_type", "section_break_e01k0", "tasks", "custom_documents_required", "description"]',
 		}
 	]

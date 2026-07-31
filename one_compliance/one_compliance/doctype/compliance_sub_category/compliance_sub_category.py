@@ -81,6 +81,7 @@ def create_project_manually(customer, project_template, expected_start_date, exp
 def create_project_template_custom_button(source_name, target_doc = None):
 	''' Method to get project template for custom button using mapdoc '''
 	def set_missing_values(source, target):
+		target.__newname = source.sub_category
 		target.compliance_category= source.compliance_category
 		target.compliance_sub_category = source.name
 		target.has_premium_tasks = 1 if source.premium_task else 0
