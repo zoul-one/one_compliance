@@ -37,6 +37,7 @@
   "hide_document_icon",
   "hide_credentials_icon",
   "hide_payment_icon",
+  "filter_working_status_on_timer_click",
   "tab_break_us4n3",
   "notifications_from_subcategory_section",
   "enable_task_before_due_date_notification",
@@ -441,6 +442,12 @@
    "fieldname": "hide_credentials_icon",
    "fieldtype": "Check",
    "label": "Hide Credentials Icon"
+  },
+  {
+   "default": "0",
+   "fieldname": "filter_working_status_on_timer_click",
+   "fieldtype": "Check",
+   "label": "Filter Working Status on Timer Click"
   },
   {
    "fieldname": "document_details_tab",

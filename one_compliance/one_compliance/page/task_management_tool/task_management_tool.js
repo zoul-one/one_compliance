@@ -7,6 +7,13 @@ frappe.pages['task-management-tool'].on_page_load = function (wrapper) {
 
 	page.main.addClass("frappe-card");
 
+	if (frappe.route_options) {
+		page.active_route_options = {
+			project: frappe.route_options.project,
+			status: frappe.route_options.status
+		};
+	}
+
 	page.current_page = 1;
 	page.page_length = 20;
 
@@ -30,7 +37,7 @@ frappe.pages['task-management-tool'].on_page_load = function (wrapper) {
 	});
 
 	make_filters(page);
-	if (!frappe.route_options || !frappe.route_options.project) {
+	if (!frappe.route_options || (!frappe.route_options.project && !frappe.route_options.status)) {
 		refresh_tasks(page, true);
 	}
 }
@@ -38,14 +45,24 @@ frappe.pages['task-management-tool'].on_page_load = function (wrapper) {
 frappe.pages['task-management-tool'].on_page_show = function (wrapper) {
 	var page = wrapper.page;
 
-	if (frappe.route_options && frappe.route_options.project) {
-		page.fields_dict.project.set_value(frappe.route_options.project);
+	if (frappe.route_options && (frappe.route_options.project || frappe.route_options.status)) {
+		page.body.find(".frappe-list, .pagination-container").remove();
+
+		page.active_route_options = {
+			project: frappe.route_options.project,
+			status: frappe.route_options.status
+		};
+
+		if (frappe.route_options.project) {
+			page.fields_dict.project.set_value(frappe.route_options.project);
+		}
+		if (frappe.route_options.status) {
+			page.fields_dict.status.set_value(frappe.route_options.status);
+		}
 
 		frappe.route_options = null;
 
-		setTimeout(() => {
-			refresh_tasks(page);
-		}, 500);
+		refresh_tasks(page, true);
 	}
 }
 
@@ -54,7 +71,7 @@ Creates and configures all filter fields for the Task Management Tool page.
 Each filter refreshes the task list when its value changes.
 */
 function make_filters(page) {
-	const project_id = localStorage.getItem('selected_project_id');
+	const project_id = (frappe.route_options && frappe.route_options.project) || localStorage.getItem('selected_project_id');
 
 	const filters = [
 		{ label: "Task", fieldname: "task", options: "Task" },
@@ -79,7 +96,7 @@ function make_filters(page) {
 	const bind_refresh = (fieldname) => {
 		let field = page.fields_dict[fieldname];
 		field.$input.on("change", function () {
-			refresh_tasks(page);
+			refresh_tasks(page, true);
 		});
 	};
 
@@ -93,7 +110,7 @@ function make_filters(page) {
 			read_only: f.read_only ? 1 : 0,
 			change() {
 				if (page.fields_dict[f.fieldname].get_value()) {
-					refresh_tasks(page);
+					refresh_tasks(page, true);
 				}
 			}
 		});
@@ -104,29 +121,32 @@ function make_filters(page) {
 		label: __("Status"),
 		fieldname: "status",
 		fieldtype: "Select",
-		default: "",
+		default: (frappe.route_options && frappe.route_options.status) || "",
 		change() {
-			refresh_tasks(page);
+			refresh_tasks(page, true);
 		}
 	});
 
 	frappe.model.with_doctype('Task', () => {
 		let meta = frappe.get_meta('Task');
-		let status_field = meta.fields.find(df => df.fieldname === 'status');
+		if (meta && meta.fields) {
+			let status_field = meta.fields.find(df => df.fieldname === 'status');
+			if (status_field && status_field.options) {
+				const exclude = ["Template", "Completed", "Cancelled"];
 
-		// List values to exclude
-		const exclude = ["Template", "Completed", "Cancelled"];
+				let options = (status_field.options || "")
+					.split("\n")
+					.filter(opt => opt && opt.trim() !== "" && !exclude.includes(opt))
+					.map(opt => ({ label: opt, value: opt }));
 
-		let options = (status_field.options || "")
-			.split("\n")
-			.filter(opt => opt && opt.trim() !== "" && !exclude.includes(opt))
-			.map(opt => ({ label: opt, value: opt }));
+				options.unshift({});
 
-		// Add empty option at top
-		options.unshift({});
-
-		page.fields_dict.status.df.options = options;
-		page.fields_dict.status.refresh();
+				if (page.fields_dict && page.fields_dict.status) {
+					page.fields_dict.status.df.options = options;
+					page.fields_dict.status.refresh();
+				}
+			}
+		}
 	});
 
 }
@@ -145,14 +165,42 @@ Fetches and displays filtered task data based on selected filters.
 Called whenever a filter field changes or the page is refreshed.
 */
 
+let refresh_timeout = null;
+let reset_page_flag = false;
+
 function refresh_tasks(page, reset_page = false) {
+	if (reset_page) {
+		reset_page_flag = true;
+	}
+
+	if (refresh_timeout) {
+		clearTimeout(refresh_timeout);
+	}
+
+	refresh_timeout = setTimeout(() => {
+		const should_reset = reset_page_flag;
+		reset_page_flag = false;
+		refresh_timeout = null;
+		_refresh_tasks(page, should_reset);
+	}, 100);
+}
+
+function _refresh_tasks(page, reset_page = false) {
 	if (reset_page) page.current_page = 1;
 
 	page.body.find(".frappe-list, .pagination-container").remove();
 
-	const selected_status = page.fields_dict.status.get_value();
+	let selected_status = page.fields_dict.status.get_value();
+	if (!selected_status && page.active_route_options && page.active_route_options.status) {
+		selected_status = page.active_route_options.status;
+	}
+
 	const task_name = page.fields_dict.task.get_value();
-	const project_name = page.fields_dict.project.get_value();
+
+	let project_name = page.fields_dict.project.get_value();
+	if (!project_name && page.active_route_options && page.active_route_options.project) {
+		project_name = page.active_route_options.project;
+	}
 	const customer_name = page.fields_dict.customer.get_value();
 	const department = page.fields_dict.department.get_value();
 	const sub_category = page.fields_dict.compliance_sub_category.get_value();
@@ -160,6 +208,9 @@ function refresh_tasks(page, reset_page = false) {
 	const employee_group = page.fields_dict.employee_group.get_value();
 	const from_date = page.fields_dict.from_date.get_value();
 	const to_date = page.fields_dict.to_date.get_value();
+
+	const current_seq = (page.request_seq || 0) + 1;
+	page.request_seq = current_seq;
 
 	frappe.call({
 		method: "one_compliance.one_compliance.page.task_management_tool.task_management_tool.get_task",
@@ -178,9 +229,22 @@ function refresh_tasks(page, reset_page = false) {
 			page_length: page.page_length
 		},
 		callback: (r) => {
+			if (current_seq !== page.request_seq) {
+				return;
+			}
+			page.active_route_options = null;
 			if (r.message) {
 				let tasks = r.message.tasks || [];
 				const active_timers = r.message.active_timers || [];
+
+				const running_task_names = active_timers.filter(t => !t.is_ad_hoc_event).map(t => t.task);
+				tasks.sort((a, b) => {
+					const a_running = running_task_names.includes(a.name);
+					const b_running = running_task_names.includes(b.name);
+					if (a_running && !b_running) return -1;
+					if (!a_running && b_running) return 1;
+					return 0;
+				});
 
 				const event_timer = active_timers.find(t => t.is_ad_hoc_event);
 				if (event_timer) {
@@ -192,6 +256,8 @@ function refresh_tasks(page, reset_page = false) {
 						start_time: event_timer.start_time
 					});
 				}
+
+				page.body.find(".frappe-list, .pagination-container").remove();
 
 				if (tasks.length > 0) {
 					render_task_list(page, tasks, r.message.icons);
