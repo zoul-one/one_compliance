@@ -449,3 +449,7 @@ def create_event_from_tool(subject, event_category, start_time, company, ends_on
 	stop_active_timer(is_ad_hoc_event=1)
 	
 	return event.name
+
+@frappe.whitelist()
+def get_timer_click_setting():
+	return bool(frappe.db.get_single_value("Compliance Settings", "filter_working_status_on_timer_click"))

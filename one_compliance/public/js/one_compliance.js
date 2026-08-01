@@ -2,6 +2,7 @@
 	'use strict';
 
 	const PREFIX = 'one-compliance-active-timer-';
+	let filterWorkingStatus = false;
 
 	// =========================
 	// CSS Injection
@@ -205,6 +206,20 @@
 			wrap.style.display = 'none';
 		}
 
+		link.addEventListener('click', function (e) {
+			if (window.frappe && frappe.set_route) {
+				e.preventDefault();
+				if (filterWorkingStatus) {
+					frappe.route_options = {
+						status: 'Working',
+					};
+				} else {
+					frappe.route_options = null;
+				}
+				frappe.set_route('task-management-tool');
+			}
+		});
+
 		wrap.appendChild(link);
 		document.body.appendChild(wrap);
 
@@ -296,6 +311,13 @@
 			callback: function (r) {
 				update(r.message);
 			},
+		});
+
+		frappe.call({
+			method: 'one_compliance.one_compliance.page.task_management_tool.task_management_tool.get_timer_click_setting',
+			callback: function (r) {
+				filterWorkingStatus = !!r.message;
+			}
 		});
 	}
 
