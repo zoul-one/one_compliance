@@ -8,192 +8,209 @@ frappe.ui.form.on('Compliance Settings', {
 				create_projects_manually_perticular_date(frm)
 			})
 		}
+		toggle_common_project_extension(frm);
 		if (frappe.session.user == "Administrator"){
 			frm.add_custom_button('Change Compliance Date', () => {
 				change_perticular_compliance_date(frm)
-			})
+		})
+	}
+	//filter for task_before_due_date_notification based on doctype
+	frm.set_query('task_before_due_date_notification', function(){
+	  return {
+		filters: {
+		  doctype_name : 'Task'
 		}
-		//filter for task_before_due_date_notification based on doctype
-		frm.set_query('task_before_due_date_notification', function(){
-			return {
-				filters: {
-					doctype_name : 'Task'
-				}
+	  }
+	})
+
+	//filter for task_overdue_notification_for_employee based on doctype
+	frm.set_query('task_overdue_notification_for_employee', function(){
+	  return {
+		filters: {
+		  doctype_name : 'Task'
+		}
+	  }
+	})
+
+	//filter for task_overdue_notification_for_director based on doctype
+	frm.set_query('task_overdue_notification_for_director', function(){
+	  return {
+		filters: {
+		  doctype_name : 'Task'
+		}
+	  }
+	})
+
+	//filter for task_complete_notification_for_director based on doctype
+	frm.set_query('task_complete_notification_for_director', function(){
+	  return {
+		filters: {
+		  doctype_name : 'Task'
+		}
+	  }
+	})
+
+	//filter for no_action_taken_notification_for_director based on doctype
+	frm.set_query('no_action_taken_notification_for_director', function(){
+	  return {
+		filters: {
+		  doctype_name : 'Task'
+		}
+	  }
+	})
+
+	//filter for project_complete_notification_for_customer based on doctype
+	frm.set_query('project_complete_notification_for_customer', function(){
+	  return {
+		filters: {
+		  doctype_name : 'Project'
+		}
+	  }
+	})
+
+	//filter for digital_signature_expiry_notification based on doctype
+	frm.set_query('digital_signature_expiry_notification', function(){
+	  return {
+		filters: {
+		  doctype_name : 'Digital Signature'
+		}
+	  };
+	});
+
+	// filter for service_item based on is_service_item
+	frm.set_query('service_item', function () {
+		return {
+			filters: {
+				is_service_item: 1
 			}
-		})
-
-		//filter for task_overdue_notification_for_employee based on doctype
-		frm.set_query('task_overdue_notification_for_employee', function(){
-			return {
-				filters: {
-					doctype_name : 'Task'
-				}
-			}
-		})
-
-		//filter for task_overdue_notification_for_director based on doctype
-		frm.set_query('task_overdue_notification_for_director', function(){
-			return {
-				filters: {
-					doctype_name : 'Task'
-				}
-			}
-		})
-
-		//filter for task_complete_notification_for_director based on doctype
-		frm.set_query('task_complete_notification_for_director', function(){
-			return {
-				filters: {
-					doctype_name : 'Task'
-				}
-			}
-		})
-
-		//filter for no_action_taken_notification_for_director based on doctype
-		frm.set_query('no_action_taken_notification_for_director', function(){
-			return {
-				filters: {
-					doctype_name : 'Task'
-				}
-			}
-		})
-
-		//filter for project_complete_notification_for_customer based on doctype
-		frm.set_query('project_complete_notification_for_customer', function(){
-			return {
-				filters: {
-					doctype_name : 'Project'
-				}
-			}
-		})
-
-		//filter for digital_signature_expiry_notification based on doctype
-		frm.set_query('digital_signature_expiry_notification', function(){
-			return {
-				filters: {
-					doctype_name : 'Digital Signature'
-				}
-			};
-		});
-
-		// filter for service_item based on is_service_item
-		frm.set_query('service_item', function () {
-				return {
-						filters: {
-								is_service_item: 1
-						}
-				};
-		});
+		};
+	});
 
 		//filter for digital_signature_sub_category based on digital_signature_category
-		frm.set_query('digital_signature_sub_category', function(){
-			return {
-				filters: {
-					compliance_category : frm.doc.digital_signature_category
-				}
-			}
-		})
+	frm.set_query('digital_signature_sub_category', function(){
+	  return {
+		filters: {
+		  compliance_category : frm.doc.digital_signature_category
+		}
+	  }
+	})
 
 		//filter for din_kyc_sub_category based on din_kyc_category
 		frm.set_query('din_kyc_sub_category', function(){
-			return {
-				filters: {
-					compliance_category : frm.doc.din_kyc_category
-				}
-			}
-		})
+	  return {
+		filters: {
+		  compliance_category : frm.doc.din_kyc_category
+		}
+	  }
+	})
 
 
 		//filter for legal_authority_sub_category based on legal_authority_category
 		frm.set_query('legal_authority_sub_category', function(){
-			return {
-				filters: {
-					compliance_category : frm.doc.legal_authority_category
-				}
-			}
-		})
+	  return {
+		filters: {
+		  compliance_category : frm.doc.legal_authority_category
+		}
+	  }
+	})
 
 		//filter for auditor_sub_category based on auditor_subcategory
 		frm.set_query('auditor_sub_category', function(){
-			return {
-				filters: {
-					compliance_category : frm.doc.auditor_category
-				}
-			}
-		})
+	  return {
+		filters: {
+		  compliance_category : frm.doc.auditor_category
+		}
+	  }
+	})
 
-	}
+	},
+	enable_common_project_extension(frm) {
+		toggle_common_project_extension(frm);
+	},
 });
 
 let create_projects_manually_perticular_date = function(frm){
-	//function to set the craete of compliance project manually
-	let d = new frappe.ui.Dialog({
-		title: 'Manual Project Creation',
-		fields: [
-				{
-						label: 'Starting Date',
-						fieldname: 'starting_date',
-						fieldtype: 'Date',
-						reqd: 1
-				},
-		],
-		primary_action_label: 'Create Project',
-		primary_action(values) {
-			if(values.starting_date){
-				frappe.call({
-					method:'one_compliance.one_compliance.doctype.compliance_settings.compliance_settings.manual_project_creations',
-					args:{
-						'starting_date': values.starting_date,
-					},
-					callback:function(r){
-						if (r.message) {
-							frm.reload_doc()
-						}
-					}
-				});
+  //function to set the craete of compliance project manually
+  let d = new frappe.ui.Dialog({
+	title: 'Manual Project Creation',
+	fields: [
+		{
+			label: 'Starting Date',
+			fieldname: 'starting_date',
+			fieldtype: 'Date',
+			reqd: 1
+		},
+	],
+	primary_action_label: 'Create Project',
+	primary_action(values) {
+	  if(values.starting_date){
+		frappe.call({
+		  method:'one_compliance.one_compliance.doctype.compliance_settings.compliance_settings.manual_project_creations',
+		  args:{
+			'starting_date': values.starting_date,
+		  },
+		  callback:function(r){
+			if (r.message) {
+			  frm.reload_doc()
 			}
-				d.hide();
-		}
-	});
-	d.show();
+		  }
+		});
+	  }
+		d.hide();
+	}
+  });
+  d.show();
 }
 
 let change_perticular_compliance_date = function(frm){
-	//function to change the compliance date manually
-	let d = new frappe.ui.Dialog({
-		title: 'Compliance Date Updation',
-		fields: [
-				{
-						label: 'Compliance Date',
-						fieldname: 'compliance_date',
-						fieldtype: 'Date',
-						reqd: 1
-				},
+  //function to change the compliance date manually
+  let d = new frappe.ui.Dialog({
+	title: 'Compliance Date Updation',
+	fields: [
+		{
+			label: 'Compliance Date',
+			fieldname: 'compliance_date',
+			fieldtype: 'Date',
+			reqd: 1
+		},
 				{
 						label: 'Compliance Agreement',
 						fieldname: 'compliance_agreement',
 						fieldtype: 'Link',
 						options: 'Compliance Agreement'
 				},
-		],
-		primary_action_label: 'Change Compliance Date',
-		primary_action(values) {
-			if(values.compliance_date){
-				frappe.call({
-					method:'one_compliance.one_compliance.doctype.compliance_settings.compliance_settings.compliance_date_update',
-					args:{
-						'compliance_date': values.compliance_date,
+	],
+	primary_action_label: 'Change Compliance Date',
+	primary_action(values) {
+	  if(values.compliance_date){
+		frappe.call({
+		  method:'one_compliance.one_compliance.doctype.compliance_settings.compliance_settings.compliance_date_update',
+		  args:{
+			'compliance_date': values.compliance_date,
 						'compliance_agreement': values.compliance_agreement,
-					},
-					callback:function(r){
-						if (r.message) {
-							frm.reload_doc()
-						}
-					}
-				});
+		  },
+		  callback:function(r){
+			if (r.message) {
+			  frm.reload_doc()
 			}
-				d.hide();
-		}
-	});
-	d.show();
+		  }
+		});
+	  }
+		d.hide();
+	}
+  });
+  d.show();
+}
+
+/*
+** Function to toggle the display of common project extension fields
+*/
+function toggle_common_project_extension(frm) {
+	const enabled = cint(frm.doc.enable_common_project_extension);
+
+	frm.toggle_display("overdue_extension_days", enabled);
+
+	if (!enabled && frm.doc.overdue_extension_days) {
+		frm.set_value("overdue_extension_days", "");
+	}
 }

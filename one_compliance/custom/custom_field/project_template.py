@@ -40,7 +40,7 @@ def get_project_template_custom_fields():
 			{
 				"fieldname": "section_break_e01k0",
 				"fieldtype": "Section Break",
-				"insert_after": "category_type",
+				"insert_after": "enable_project_extension",
 			},
 			{
 				"fieldname": "column_break_igely",
@@ -97,6 +97,22 @@ def get_project_template_custom_fields():
 				"insert_after": "project_type",
 				"hide_days": 1,
 				"hide_seconds": 1,
+			},
+			{
+				"fieldname": "enable_project_extension",
+				"fieldtype": "Check",
+				"label": "Enable Project Extension",
+				"insert_after": "category_type",
+				"default": 0,
+				"description": "Allows fallback to the common extension settings.",
+			},
+			{
+				"fieldname": "overdue_extension_days",
+				"fieldtype": "Int",
+				"label": "Overdue Extension Days",
+				"insert_after": "enable_project_extension",
+				"default": 0,
+				"description": "Number of days to automatically extend the project's Expected End Date when it becomes overdue.",
 			},
 		]
 	}

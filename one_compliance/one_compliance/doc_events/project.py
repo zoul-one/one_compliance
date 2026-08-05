@@ -12,6 +12,7 @@ from one_compliance.one_compliance.utils import (
 	create_project_completion_todos,
 	send_notification,
 )
+
 def validate(doc, method=None):
 	set_is_billable(doc)
 
@@ -106,18 +107,71 @@ def set_project_status(project, status, comment=None):
 @frappe.whitelist()
 def set_status_to_overdue():
 
-	projects = frappe.get_all(
-		"Project",
-		filters={"status": ["not in", ["Cancelled", "Hold", "Completed", "Invoiced", "Partially Paid", "Paid"]]},
-		fields=["name", "expected_end_date"],
-	)
+    projects = frappe.get_all(
+        "Project",
+        filters={
+            "status": ["not in", ["Cancelled", "Hold", "Completed", "Invoiced", "Partially Paid", "Paid"]]
+        },
+        fields=["name", "expected_end_date", "project_template"],
+    )
 
-	today_date = getdate(today())
-	for project in projects:
-		if project.expected_end_date and today_date > getdate(project.expected_end_date):
-			if frappe.db.exists("Task", {"project": project.name, "status": ["not in", ["Completed", "Cancelled", "Hold"]]}):
-				frappe.db.set_value("Project", project.name, "status", "Overdue")
+    today_date = getdate(today())
+    settings = frappe.get_single("Compliance Settings")
 
+    for project in projects:
+        if not project.expected_end_date or today_date <= getdate(project.expected_end_date):
+            continue
+
+        if not frappe.db.exists(
+            "Task",
+            {
+                "project": project.name,
+                "status": ["not in", ["Completed", "Cancelled", "Hold"]],
+            },
+        ):
+            continue
+
+        try:
+            doc = frappe.get_doc("Project", project.name)
+            extension_days = 0
+            project_template = doc.project_template
+
+            if not project_template and doc.compliance_sub_category:
+                project_template = frappe.db.get_value(
+                    "Compliance Sub Category",
+                    doc.compliance_sub_category,
+                    "project_template",
+                )
+
+            if project_template:
+                template = frappe.get_doc("Project Template", project_template)
+
+                if template.overdue_extension_days and template.overdue_extension_days > 0:
+                    extension_days = template.overdue_extension_days
+                elif template.enable_project_extension:
+                    if (
+                        settings.enable_common_project_extension
+                        and settings.overdue_extension_days
+                        and settings.overdue_extension_days > 0
+                    ):
+                        extension_days = settings.overdue_extension_days
+
+            if extension_days:
+                old_date = doc.expected_end_date
+                new_date = add_days(old_date, extension_days)
+                frappe.db.set_value("Project", doc.name, "expected_end_date", new_date)
+                frappe.db.set_value("Project", doc.name, "status", "Open")
+                frappe.db.set_value("Project", doc.name, "is_overdue", 1)
+                doc.add_comment(
+                    "Comment",
+                    text=f"Expected End Date was automatically changed from {old_date} to {new_date} based on the configured Overdue Extension Days.",
+                )
+            else:
+                frappe.db.set_value("Project", doc.name, "status", "Overdue")
+                frappe.db.set_value("Project", doc.name, "is_overdue", 1)
+        except Exception:
+            frappe.log_error(frappe.get_traceback(), f"set_status_to_overdue failed for project {project.name}")
+            continue
 
 @frappe.whitelist()
 def get_permission_query_conditions(user=None):

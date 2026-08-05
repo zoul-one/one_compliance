@@ -149,6 +149,14 @@ def get_project_custom_fields():
 				"fieldtype": "Section Break",
 				"label": " ",
 				"insert_after": "project_dashboard_html"
+			},
+			{
+				"fieldname": "is_overdue",
+				"fieldtype": "Check",
+				"label": "Is Overdue",
+				"read_only": 1,
+				"default": 0,
+				"insert_after": "expected_end_date",
 			}
 		]
 	}
