@@ -1,4 +1,4 @@
-# Copyright (c) 2023, efeone and contributors
+# Copyright (c) 2026, Zoul Technologies Private Limited and contributors
 # For license information, please see license.txt
 
 import frappe
@@ -6,23 +6,23 @@ from frappe.model.document import Document
 
 class OutwardRegister(Document):
 
-    def on_submit(self):
-        if not self.if_outward_only:
-            self.update_inward_child_table()
+	def on_submit(self):
+		if not self.if_outward_only:
+			self.update_inward_child_table()
 
-    def update_inward_child_table(self):
-        """ Method to update status of Inward child table based on Outward child table """
-        if not self.inward_register:
-            return
+	def update_inward_child_table(self):
+		""" Method to update status of Inward child table based on Outward child table """
+		if not self.inward_register:
+			return
 
-        inward_doc = frappe.get_doc('Inward Register', self.inward_register)
-        for document_types in self.document_register_type:
-            document_doc = document_types.document_register_type
-            for register_types in inward_doc.register_type_detail:
-                if register_types.document_register_type == document_doc:
-                    register_types.status = 'Returned'
-                    register_types.outward_register = self.name
-        inward_doc.save()
+		inward_doc = frappe.get_doc('Inward Register', self.inward_register)
+		for document_types in self.document_register_type:
+			document_doc = document_types.document_register_type
+			for register_types in inward_doc.register_type_detail:
+				if register_types.document_register_type == document_doc:
+					register_types.status = 'Returned'
+					register_types.outward_register = self.name
+		inward_doc.save()
 
 
 

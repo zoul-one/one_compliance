@@ -1,4 +1,4 @@
-# Copyright (c) 2023, efeone and contributors
+# Copyright (c) 2026, Zoul Technologies Private Limited and contributors
 # For license information, please see license.txt
 
 import json
@@ -398,14 +398,14 @@ def allocate_tasks_to_employee(selected_task_ids, selected_employee_ids):
 
 @frappe.whitelist()
 def get_tasks_from_projects(projects):
-    if isinstance(projects, str):
-        projects = json.loads(projects)
-    tasks = frappe.get_all(
-        "Task",
-        filters={
-            "project": ["in", projects],
-            "status": ["not in", ["Completed", "Cancelled","Template"]],
-        },
-        fields=["name"]
-    )
-    return [task.name for task in tasks]
+	if isinstance(projects, str):
+		projects = json.loads(projects)
+	tasks = frappe.get_all(
+		"Task",
+		filters={
+			"project": ["in", projects],
+			"status": ["not in", ["Completed", "Cancelled","Template"]],
+		},
+		fields=["name"]
+	)
+	return [task.name for task in tasks]

@@ -4,7 +4,7 @@ Frappe app to facilitate operations in Compliances and Tasks
 
 ### How to Install
 
-1. `bench get-app https://github.com/efeone/one_compliance.git`
+1. `bench get-app https://github.com/zoul/one_compliance.git`
 2. `bench setup requirements`
 3. `bench build --app one_compliance`
 4. `bench --site [your.site.name] install-app one_compliance`
@@ -30,5 +30,5 @@ Will be using the same guidelines from ERPNext
 
 #### License
 
-GNU/General Public License (see [license.txt](https://github.com/efeone/one_compliance/blob/master/license.txt))
+GNU/General Public License (see [license.txt](https://github.com/zoul/one_compliance/blob/master/license.txt))
 one_compliance code is licensed as GNU General Public License (v3)

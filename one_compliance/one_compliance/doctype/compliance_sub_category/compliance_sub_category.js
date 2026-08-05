@@ -1,4 +1,4 @@
-// Copyright (c) 2023, efeone and contributors
+// Copyright (c) 2026, Zoul Technologies Private Limited and contributors
 // For license information, please see license.txt
 
 frappe.ui.form.on('Compliance Sub Category', {
@@ -23,22 +23,22 @@ frappe.ui.form.on('Compliance Sub Category', {
 			set_notification_templates(frm);
 		}
 		if (frm.doc.item_code) {
-        if (frm.doc.enabled) {
-            frappe.call({
-                method: 'one_compliance.one_compliance.doctype.compliance_sub_category.compliance_sub_category.enable_related_item',
-                args: {
-                    'item_name': frm.doc.item_code
-                }
-            });
-        } else {
-            frappe.call({
-                method: 'one_compliance.one_compliance.doctype.compliance_sub_category.compliance_sub_category.disable_related_item',
-                args: {
-                    'item_name': frm.doc.item_code
-                }
-            });
-        }
-    }
+		if (frm.doc.enabled) {
+			frappe.call({
+				method: 'one_compliance.one_compliance.doctype.compliance_sub_category.compliance_sub_category.enable_related_item',
+				args: {
+					'item_name': frm.doc.item_code
+				}
+			});
+		} else {
+			frappe.call({
+				method: 'one_compliance.one_compliance.doctype.compliance_sub_category.compliance_sub_category.disable_related_item',
+				args: {
+					'item_name': frm.doc.item_code
+				}
+			});
+		}
+	}
 	},
 	internal: function(frm) {
 			if (frm.doc.internal) {
@@ -79,47 +79,47 @@ frappe.ui.form.on('Compliance Sub Category', {
 let create_project_dialog = function(frm){
 
 	let d = new frappe.ui.Dialog({
-    title: 'Enter details',
-    fields: [
-        {
-            label: 'Customer',
-            fieldname: 'customer',
-            fieldtype: 'Link',
+	title: 'Enter details',
+	fields: [
+		{
+			label: 'Customer',
+			fieldname: 'customer',
+			fieldtype: 'Link',
 						options: 'Customer',
 						reqd: 1,
 						get_query: function () {
-              return {
-                filters: {
-                  disabled: 0
-                }
-              };
-            }
-        },
-        {
-            label: 'Project Template',
-            fieldname: 'project_template',
-            fieldtype: 'Link',
+			  return {
+				filters: {
+				  disabled: 0
+				}
+			  };
+			}
+		},
+		{
+			label: 'Project Template',
+			fieldname: 'project_template',
+			fieldtype: 'Link',
 						options: 'Project Template',
 						reqd: 1,
 						default: frm.doc.project_template
-        },
-        {
-            label: 'Expected Start Date',
-            fieldname: 'expected_start_date',
-            fieldtype: 'Date',
+		},
+		{
+			label: 'Expected Start Date',
+			fieldname: 'expected_start_date',
+			fieldtype: 'Date',
 						reqd: 1,
 						default: 'Today'
-        },
+		},
 				{
-            label: 'Expected End Date',
-            fieldname: 'expected_end_date',
+			label: 'Expected End Date',
+			fieldname: 'expected_end_date',
 						reqd: 1,
-            fieldtype: 'Date'
-        }
-    ],
-    size: 'lare',
-    primary_action_label: 'Create Project',
-    primary_action(values) {
+			fieldtype: 'Date'
+		}
+	],
+	size: 'lare',
+	primary_action_label: 'Create Project',
+	primary_action(values) {
 			frappe.call({
 				method:'one_compliance.one_compliance.doctype.compliance_sub_category.compliance_sub_category.create_project_manually',
 				args:{
@@ -134,8 +134,8 @@ let create_project_dialog = function(frm){
 					}
 				}
 			});
-        d.hide();
-    }
+		d.hide();
+	}
 });
 
 d.show();
@@ -202,12 +202,12 @@ function set_filters(frm) {
 	});
 
 	frm.set_query('default_income_account', 'default_account', (doc, cdt, cdn) => {
-    let d = locals[cdt][cdn];
-    return {
-      filters: {
-        is_group:0,
-        company: d.company
-      }
-    }
+	let d = locals[cdt][cdn];
+	return {
+	  filters: {
+		is_group:0,
+		company: d.company
+	  }
+	}
   });
 }

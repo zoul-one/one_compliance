@@ -2,9 +2,9 @@ from . import __version__ as app_version
 
 app_name = "one_compliance"
 app_title = "One Compliance"
-app_publisher = "efeone"
+app_publisher = "Zoul Technologies Private Limited"
 app_description = "Frappe app to facilitate operations in Compliances and Tasks"
-app_email = "info@efeone.com"
+app_email = "sales@zoul.one"
 app_license = "MIT"
 required_apps = ["frappe/erpnext", "frappe/hrms"]
 

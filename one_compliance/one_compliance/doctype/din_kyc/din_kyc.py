@@ -1,4 +1,4 @@
-# Copyright (c) 2024, efeone and contributors
+# Copyright (c) 2026, Zoul Technologies Private Limited and contributors
 # For license information, please see license.txt
 
 import frappe
@@ -94,8 +94,8 @@ def create_project_from_din_kyc(din_kyc,expiry_date):
 				for depends_task in template_task_doc.depends_on:
 					dependent_task = frappe.get_doc('Task', {'project':project.name,'subject':depends_task.subject}, 'name')
 					task_doc.append("depends_on", {
-                        "task": dependent_task.name,
-                    })
+						"task": dependent_task.name,
+					})
 			task_doc.save(ignore_permissions=True)
 			if template_task.type and template_task.employee_or_group:
 				frappe.db.set_value('Task', task_doc.name, 'assigned_to', template_task.employee_or_group)
