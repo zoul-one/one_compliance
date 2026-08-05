@@ -1,27 +1,27 @@
-// Copyright (c) 2024, efeone and contributors
+// Copyright (c) 2026, Zoul Technologies Private Limited and contributors
 // For license information, please see license.txt
 
 frappe.query_reports["Detailed Project Summary"] = {
 	"filters": [
 		{
-            label: __("From Date"),
-            fieldname: "from_date",
-            fieldtype: "Date",
+			label: __("From Date"),
+			fieldname: "from_date",
+			fieldtype: "Date",
 			default: frappe.datetime.add_months(frappe.datetime.get_today(), -1),
 			reqd: 1
-        },
+		},
 		{
-            label: __("To Date"),
-            fieldname: "to_date",
-            fieldtype: "Date",
+			label: __("To Date"),
+			fieldname: "to_date",
+			fieldtype: "Date",
 			default: frappe.datetime.get_today(),
 			reqd: 1
-        },
+		},
 		{
-            label: __("Department"),
-            fieldname: "department",
-            fieldtype: "Link",
-            options: "Department",
+			label: __("Department"),
+			fieldname: "department",
+			fieldtype: "Link",
+			options: "Department",
 			get_query: function(){
 					return {
 						filters: {
@@ -29,12 +29,12 @@ frappe.query_reports["Detailed Project Summary"] = {
 						}
 					}
 				}
-        },
+		},
 		// {
-        //     label: __("Employee"),
-        //     fieldname: "employee",
-        //     fieldtype: "Link",
-        //     options: "Employee",
+		//     label: __("Employee"),
+		//     fieldname: "employee",
+		//     fieldtype: "Link",
+		//     options: "Employee",
 		// 	get_query: function(){
 		// 		return {
 		// 			filters: {
@@ -42,7 +42,7 @@ frappe.query_reports["Detailed Project Summary"] = {
 		// 			}
 		// 		}
 		// 	}
-        // },
+		// },
 	],
 	formatter: function (value, row, column, data, default_formatter) {
 		value = default_formatter(value, row, column, data);

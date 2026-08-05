@@ -1,4 +1,4 @@
-# Copyright (c) 2024, efeone and contributors
+# Copyright (c) 2026, Zoul Technologies Private Limited and contributors
 # For license information, please see license.txt
 
 

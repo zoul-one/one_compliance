@@ -1,4 +1,4 @@
-# Copyright (c) 2025, efeone and contributors
+# Copyright (c) 2026, Zoul Technologies Private Limited and contributors
 # For license information, please see license.txt
 
 import frappe
@@ -26,90 +26,113 @@ def get_columns() -> list[dict]:
 		{"label": "Outstanding Amount", "fieldname": "outstanding_amount", "fieldtype": "Currency", "width": 180},
 	]
 
-def get_conditions(filters: dict) -> tuple[str, list]:
-	conditions = []
-	vals = []
+def get_data(filters: dict) -> list[dict]:
+	result = []
+
+	# 1. Fetch Sales Invoices
+	si_conditions = []
+	si_vals = []
 
 	if filters.get("company"):
-		conditions.append("so.company = %s")
-		vals.append(filters.get("company"))
+		si_conditions.append("si.company = %s")
+		si_vals.append(filters.get("company"))
 
 	if filters.get("customer"):
-		conditions.append("so.customer = %s")
-		vals.append(filters.get("customer"))
+		si_conditions.append("si.customer = %s")
+		si_vals.append(filters.get("customer"))
 
 	if filters.get("customer_group"):
-		conditions.append("cust.customer_group = %s")
-		vals.append(filters.get("customer_group"))
+		si_conditions.append("cust.customer_group = %s")
+		si_vals.append(filters.get("customer_group"))
 
-	return " AND ".join(conditions), vals
+	if filters.get("from_date") and filters.get("to_date"):
+		si_conditions.append("si.posting_date BETWEEN %s AND %s")
+		si_vals.extend([filters.get("from_date"), filters.get("to_date")])
 
-def get_data(filters: dict) -> list[dict]:
-	date_cond, date_vals = "", []
-	fd, td = filters.get("from_date"), filters.get("to_date")
+	si_where = " AND ".join(si_conditions)
+	if si_where:
+		si_where = "AND " + si_where
 
-	if fd and td:
-		date_cond = "AND so.transaction_date BETWEEN %s AND %s"
-		date_vals.extend([fd, td])
+	sales_invoices = frappe.db.sql(f"""
+		SELECT
+			si.posting_date AS posting_date,
+			si.customer,
+			si.due_date AS due_date,
+			'Sales Invoice' AS voucher_type,
+			si.name AS voucher_no,
+			COALESCE(NULLIF(si.rounded_total, 0), si.grand_total) AS grand_total,
+			si.paid_amount AS paid_amount,
+			si.outstanding_amount AS outstanding_amount,
+			cust.customer_group
+		FROM `tabSales Invoice` si
+		LEFT JOIN `tabCustomer` cust ON cust.name = si.customer
+		WHERE si.docstatus = 1
+		  AND si.outstanding_amount != 0
+		  {si_where}
+	""", si_vals, as_dict=True)
 
-	conditions, vals = get_conditions(filters)
+	result.extend(sales_invoices)
 
-	w_states = ["Proforma Invoice", "Invoiced"]
-	wf_cond = "AND so.workflow_state IN ({})".format(", ".join(["%s"] * len(w_states)))
+	# 2. Fetch Sales Orders (Proforma Invoice only, without any submitted Sales Invoice)
+	so_conditions = []
+	so_vals = []
 
-	bind_vals = w_states + date_vals + vals
+	if filters.get("company"):
+		so_conditions.append("so.company = %s")
+		so_vals.append(filters.get("company"))
+
+	if filters.get("customer"):
+		so_conditions.append("so.customer = %s")
+		so_vals.append(filters.get("customer"))
+
+	if filters.get("customer_group"):
+		so_conditions.append("cust.customer_group = %s")
+		so_vals.append(filters.get("customer_group"))
+
+	if filters.get("from_date") and filters.get("to_date"):
+		so_conditions.append("so.transaction_date BETWEEN %s AND %s")
+		so_vals.extend([filters.get("from_date"), filters.get("to_date")])
+
+	so_where = " AND ".join(so_conditions)
+	if so_where:
+		so_where = "AND " + so_where
 
 	sales_orders = frappe.db.sql(f"""
 		SELECT
 			so.transaction_date AS posting_date,
 			so.customer,
-			ps.due_date AS due_date,
-			so.name AS sales_order,
-			so.rounded_total AS so_rounded_total,
-			cust.customer_group,
-			MAX(CASE WHEN si.name IS NOT NULL THEN si.name ELSE NULL END) AS sales_invoice,
-			MAX(si.rounded_total) AS si_rounded_total,
-			MAX((
-				SELECT SUM(per.allocated_amount)
-				FROM `tabPayment Entry Reference` per
-				JOIN `tabPayment Entry` pe ON pe.name = per.parent
-				WHERE per.reference_doctype = 'Sales Invoice'
-				  AND per.reference_name = si.name
-				  AND pe.docstatus = 1
-			)) AS paid_amount
-
+			MIN(ps.due_date) AS due_date,
+			'Sales Order' AS voucher_type,
+			so.name AS voucher_no,
+			COALESCE(NULLIF(so.rounded_total, 0), so.grand_total) AS grand_total,
+			so.advance_paid AS paid_amount,
+			(COALESCE(NULLIF(so.rounded_total, 0), so.grand_total) - so.advance_paid) AS outstanding_amount,
+			cust.customer_group
 		FROM `tabSales Order` so
 		LEFT JOIN `tabCustomer` cust ON cust.name = so.customer
 		LEFT JOIN `tabPayment Schedule` ps ON ps.parent = so.name
-		LEFT JOIN `tabSales Invoice Item` sii ON sii.sales_order = so.name
-		LEFT JOIN `tabSales Invoice` si ON si.name = sii.parent AND si.docstatus = 1
-
 		WHERE so.docstatus = 1
-		  {wf_cond}
-		  {date_cond}
-		  {"AND " + conditions if conditions else ""}
+		  AND (so.workflow_state = 'Proforma Invoice' OR so.status = 'Proforma Invoice')
+		  AND NOT EXISTS (
+		  	SELECT 1
+		  	FROM `tabSales Invoice Item` sii
+		  	JOIN `tabSales Invoice` si ON si.name = sii.parent
+		  	WHERE sii.sales_order = so.name
+		  	  AND si.docstatus = 1
+		  )
+		  {so_where}
 		GROUP BY so.name
-	""", bind_vals, as_dict=True)
+		HAVING outstanding_amount != 0
+	""", so_vals, as_dict=True)
 
-	result = []
-	for row in sales_orders:
-		if row.sales_invoice:
-			row.voucher_type = "Sales Invoice"
-			row.voucher_no = row.sales_invoice
-			row.grand_total = row.si_rounded_total or 0
-		else:
-			row.voucher_type = "Sales Order"
-			row.voucher_no = row.sales_order
-			row.grand_total = row.so_rounded_total or 0
+	result.extend(sales_orders)
 
-		row.paid_amount = row.paid_amount or 0
-		row.outstanding_amount = row.grand_total - row.paid_amount
-
-		result.append(row)
+	# 3. Fetch Journal Entries
 	journal_entries = get_journal_entries(filters)
 	result.extend(journal_entries)
-	# Sort by posting date descending
-	result.sort(key=lambda x: x.posting_date, reverse=True)
+
+	# Sort by posting date descending, and fallback to voucher_no
+	result.sort(key=lambda x: (getdate(x.get("posting_date")) if x.get("posting_date") else getdate("1900-01-01"), x.get("voucher_no")), reverse=True)
 	return result
 
 def get_journal_entries(filters):
@@ -134,6 +157,10 @@ def get_journal_entries(filters):
 		conditions.append("jel.party = %s")
 		vals.append(filters["customer"])
 
+	if filters.get("customer_group"):
+		conditions.append("cust.customer_group = %s")
+		vals.append(filters["customer_group"])
+
 	if filters.get("from_date") and filters.get("to_date"):
 		conditions.append("je.posting_date BETWEEN %s AND %s")
 		vals.append(filters["from_date"])
@@ -151,7 +178,7 @@ def get_journal_entries(filters):
 			'Journal Entry' AS voucher_type,
 			je.name AS voucher_no,
 
-			(jel.debit - jel.credit) AS grand_total,
+			SUM(jel.debit - jel.credit) AS grand_total,
 
 			COALESCE((
 				SELECT SUM(per.allocated_amount)
@@ -159,16 +186,20 @@ def get_journal_entries(filters):
 				JOIN `tabPayment Entry` pe ON pe.name = per.parent
 				WHERE per.reference_doctype = 'Journal Entry'
 				  AND per.reference_name = je.name
+				  AND pe.party_type = 'Customer'
+				  AND pe.party = jel.party
 				  AND pe.docstatus = 1
 			), 0) AS paid_amount,
 
-			(jel.debit - jel.credit) -
+			SUM(jel.debit - jel.credit) -
 			COALESCE((
 				SELECT SUM(per.allocated_amount)
 				FROM `tabPayment Entry Reference` per
 				JOIN `tabPayment Entry` pe ON pe.name = per.parent
 				WHERE per.reference_doctype = 'Journal Entry'
 				  AND per.reference_name = je.name
+				  AND pe.party_type = 'Customer'
+				  AND pe.party = jel.party
 				  AND pe.docstatus = 1
 			), 0) AS outstanding_amount,
 
@@ -184,6 +215,6 @@ def get_journal_entries(filters):
 		  AND jel.party_type = 'Customer'
 		  {where}
 
-		GROUP BY je.name
+		GROUP BY je.name, jel.party
 		HAVING outstanding_amount != 0
 	""", vals, as_dict=True)

@@ -1,4 +1,4 @@
-# Copyright (c) 2024, efeone and Contributors
+# Copyright (c) 2026, Zoul Technologies Private Limited and Contributors
 # See license.txt
 
 # import frappe

@@ -1,19 +1,19 @@
-// Copyright (c) 2023, efeone and contributors
+// Copyright (c) 2026, Zoul Technologies Private Limited and contributors
 // For license information, please see license.txt
 
 frappe.ui.form.on('Inward Register', {
 	refresh: function(frm) {
-    if(frm.is_new()){
+	if(frm.is_new()){
 			// set received by field as session user
-      frm.set_value("received_by",frappe.session.user)
-    }
+	  frm.set_value("received_by",frappe.session.user)
+	}
 		if(!frm.is_new() && frm.doc.docstatus == 1){
 			//custom button to create outward register and route to outward register doctype
 			frm.add_custom_button('Create Outward Register', () =>{
 				frappe.model.open_mapped_doc({
-	        method: 'one_compliance.one_compliance.doctype.inward_register.inward_register.create_outward_register',
-	        frm: cur_frm
-	      });
+			method: 'one_compliance.one_compliance.doctype.inward_register.inward_register.create_outward_register',
+			frm: cur_frm
+		  });
 			})
 		}
 		let roles = frappe.user_roles;
@@ -58,7 +58,7 @@ let digital_signature_dialog = function (frm) {
 				}
 		],
 		primary_action_label: 'Update',
-    primary_action(values) {
+	primary_action(values) {
 			d.hide()
 			if (values.digital_signature){
 				frappe.call({
@@ -78,7 +78,7 @@ let digital_signature_dialog = function (frm) {
 					}
 				})
 			}
-    }
+	}
 });
 
 d.show();
