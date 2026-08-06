@@ -8,7 +8,11 @@ from frappe.desk.form.assign_to import clear, close_all_assignments
 from frappe.email.doctype.notification.notification import get_context
 from frappe.utils import add_days, cstr, date_diff, flt, getdate, today
 from frappe.utils.data import format_date
-from frappe.utils.nestedset import NestedSet
+from erpnext.projects.doctype.task.task import (
+    Task,
+    check_if_child_exists,
+    CircularReferenceError,
+)
 from erpnext.projects.doctype.task.task import check_if_child_exists, CircularReferenceError
 
 from one_compliance.one_compliance.utils import (
@@ -18,7 +22,7 @@ from one_compliance.one_compliance.utils import (
 )
 
 
-class CustomTask(NestedSet):
+class CustomTask(Task):
 	# begin: auto-generated types
 	# This code is auto-generated. Do not modify anything in this block.
 
