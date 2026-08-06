@@ -30,7 +30,7 @@ class ComplianceAgreement(Document):
 
 	def on_submit(self):
 		self.update_compliance_agreement_status()
-		# self.set_compliance_date()
+		self.set_compliance_date()
 
 	def on_update_after_submit(self):
 		self.sign_validation()
@@ -161,21 +161,6 @@ class ComplianceAgreement(Document):
 				else:
 					project_date = valid_from
 
-					if sub.project_template and not frappe.db.exists("Project", {
-						"compliance_agreement": self.name,
-						"compliance_sub_category": sub.name
-					}):
-						create_project_from_template(
-							sales_order=None,
-							project_template=sub.project_template,
-							customer=self.customer,
-							company=self.company,
-							compliance_sub_category=sub.name,
-							compliance_category_details_id=row.name,
-							compliance_agreement=self.name,
-							compliance_category=sub.compliance_category or "",
-							compliance_date=project_date
-						)
 	def validate_agreement_dates(self):
 		if self.posting_date:
 			if getdate(self.posting_date) > getdate(today()):
@@ -315,7 +300,6 @@ class ComplianceAgreement(Document):
 		return start1 <= end2 and start2 <= end1
 
 	def make_sales_invoice(self):
-
 		projectlist = frappe.get_all(
 			"Project",
 			filters={
@@ -476,7 +460,7 @@ def get_rate_from_compliance_agreement(compliance_agreement, compliance_sub_cate
 @frappe.whitelist()
 def create_sales_orders_from_compliance_agreements(posting_date=today()):
 	"""
-	Create Sales Orders and/or Projects automatically from active Compliance Agreements.
+	Create Projects automatically from active Compliance Agreements.
 	Sales Order is created only if the Compliance Sub Category is billable.
 	Project is created in both cases.
 	"""
@@ -825,43 +809,6 @@ def create_future_one_time_projects():
 					f"Failed to create project for Agreement: {doc.name}, Sub Category: {sub_cat.name}",
 					e
 				)
-			if not sub_cat.allow_repeat and sub_cat.is_billable:
-				exists = frappe.db.exists(
-					"Sales Order",
-					{
-						"compliance_agreement": doc.name,
-						"compliance_sub_category": sub_cat.name,
-						"transaction_date": today_date
-					}
-				)
-				if not exists:
-					so = frappe.new_doc("Sales Order")
-					so.customer = doc.customer
-					so.company = doc.company
-					so.compliance_agreement = doc.name
-					so.compliance_sub_category = sub_cat.name
-					so.transaction_date = today_date
-					so.delivery_date = today_date
-
-					if doc.default_payment_terms_template:
-						so.payment_terms_template = doc.default_payment_terms_template
-
-					item_code = sub_cat.item_code
-					item_name = frappe.db.get_value("Item", item_code, "item_name")
-					rate = sub_cat.rate or 0
-
-					so.append("items", {
-						"item_code": item_code,
-						"item_name": item_name,
-						"qty": 1,
-						"rate": rate
-					})
-
-					so.insert(ignore_permissions=True)
-					so.submit()
-					if row.project:
-						frappe.db.set_value("Project", row.project, "sales_order", so.name)
-						frappe.db.set_value("Sales Order", so.name, "project", row.project)
 		doc.save(ignore_permissions=True)
 						
 @frappe.whitelist()
@@ -872,10 +819,11 @@ def create_sales_order_and_project_from_popup(
 	compliance_category_details_id
 ):
 	"""
-	Create Project (always) and Sales Order (only if billable)
+	Create Project (always)
 	and update compliance dates same as auto scheduler logic.
 	"""
 
+	current_date = getdate(compliance_date)
 	compliance_date = getdate(compliance_date)
 	agreement = frappe.get_doc("Compliance Agreement", compliance_agreement)
 	subcat = frappe.db.get_value(
@@ -896,26 +844,6 @@ def create_sales_order_and_project_from_popup(
 		["rate", "compliance_date", "next_compliance_date"],
 		as_dict=True
 	)
-
-	rate = detail.rate or 0
-	old_next_compliance_date = detail.next_compliance_date
-
-	new_compliance_date = old_next_compliance_date
-	new_next_compliance_date = None
-
-	if subcat.allow_repeat:
-		if subcat.repeat_on == "Monthly":
-			new_next_compliance_date = add_months(new_compliance_date, 1)
-
-		elif subcat.repeat_on == "Quarterly":
-			new_next_compliance_date = add_months(new_compliance_date, 3)
-
-		elif subcat.repeat_on == "Half Yearly":
-			new_next_compliance_date = add_months(new_compliance_date, 6)
-
-		elif subcat.repeat_on == "Yearly":
-			new_next_compliance_date = add_months(new_compliance_date, 12)
-
 	project = None
 	if subcat.project_template:
 		project = create_project_from_template(
@@ -930,52 +858,37 @@ def create_sales_order_and_project_from_popup(
 			compliance_date=compliance_date, 
 		)
 
-		#Update next compliance dates
+	# === Calculate compliance dates (common for both cases) ===
+	compliance_date = None
+	next_compliance_date = None
+
+	if subcat.allow_repeat:
+		step = {"Monthly": 1, "Quarterly": 3, "Half Yearly": 6, "Yearly": 12}.get(subcat.repeat_on, 0)
+		if step:
+			day = cint(subcat.day)
+			# Calculate next compliance date
+			next_d = add_months(current_date, step)
+			try:
+				compliance_date = next_d.replace(day=day)
+			except ValueError:
+				compliance_date = get_last_day(next_d)
+
+			# Calculate subsequent compliance date
+			subseq_d = add_months(compliance_date, step)
+			try:
+				next_compliance_date = subseq_d.replace(day=day)
+			except ValueError:
+				next_compliance_date = get_last_day(subseq_d)
+	else:
+		compliance_date = getdate(current_date)
+		next_compliance_date = None
+	if compliance_date:
 		frappe.db.set_value(
-			"Compliance Category Details",
-			compliance_category_details_id,
-			{
-				"compliance_date": new_compliance_date,
-				"next_compliance_date": new_next_compliance_date
-			}
-		)
-	if not subcat.is_billable:
-		return f"Project Created: {project.name if project else 'No Template'} | Not Billable"
-
-	exists = frappe.db.exists("Sales Order", {
-		"compliance_agreement": compliance_agreement,
-		"compliance_sub_category": compliance_sub_category,
-		"transaction_date": compliance_date
-	})
-
-	if exists:
-		return "Sales Order already exists for this date"
-	so = frappe.new_doc("Sales Order")
-	so.customer = agreement.customer
-	so.company = agreement.company
-	so.compliance_agreement = compliance_agreement
-	so.compliance_sub_category = compliance_sub_category
-	so.transaction_date = compliance_date
-	so.delivery_date = compliance_date
-
-	if agreement.default_payment_terms_template:
-		so.payment_terms_template = agreement.default_payment_terms_template
-
-	item_name = frappe.db.get_value("Item", subcat.item_code, "item_name")
-	so.append("items", {
-		"item_code": subcat.item_code,
-		"item_name": item_name,
-		"qty": 1,
-		"rate": rate,
-		"description": project.custom_project_service if project else item_name,
-		"project": project.name if project else None
-	})
-
-	so.insert(ignore_permissions=True)
-	so.submit()
-
-	if project:
-		project.db_set("sales_order", so.name)
-		so.db_set("project", project.name)
-
-	return f"Sales Order Created: {so.name} | Project Created: {project.name if project else 'No Template'}"
+		"Compliance Category Details",
+		compliance_category_details_id,
+		{
+			"compliance_date": compliance_date,
+			"next_compliance_date": next_compliance_date
+		}
+	)
+	return f"Project Created: {project.name if project else 'No Template'}"
