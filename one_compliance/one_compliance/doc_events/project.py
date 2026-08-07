@@ -348,8 +348,8 @@ def create_sales_order_for_project(doc):
 		so.company = doc.company
 		so.compliance_agreement = doc.compliance_agreement
 		so.compliance_sub_category = doc.compliance_sub_category
-		so.transaction_date = compliance_date
-		so.delivery_date = compliance_date
+		so.transaction_date = compliance_date or today()
+		so.delivery_date = compliance_date or today()
 		so.project = doc.name
 
 		so.append("items", {
