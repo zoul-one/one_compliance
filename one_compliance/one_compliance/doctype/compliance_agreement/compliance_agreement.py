@@ -12,7 +12,7 @@ MONTH_MAP = {
 }
 
 def get_month_name(num):
-    return next(name for name, number in MONTH_MAP.items() if number == num)
+	return next(name for name, number in MONTH_MAP.items() if number == num)
 
 class ComplianceAgreement(Document):
 	def before_insert(self):
@@ -31,12 +31,14 @@ class ComplianceAgreement(Document):
 	def on_submit(self):
 		self.update_compliance_agreement_status()
 		self.set_compliance_date()
+		self.create_non_repeat_projects()
 
 	def on_update_after_submit(self):
 		self.sign_validation()
 		self.update_compliance_agreement_status()
 		# self.set_compliance_date()
 		self.validate_compliance_dates_on_table()
+		self.create_non_repeat_projects()
 
 	def validate_compliance_dates_on_table(self):
 		'''
@@ -340,6 +342,63 @@ class ComplianceAgreement(Document):
 			frappe.db.set_value(self.doctype, self.name, "next_invoice_date", next_invoice_date)
 			frappe.db.commit()
 
+	def create_non_repeat_projects(self):
+		if self.status != "Active":
+			return
+
+		today_date = getdate(today())
+		valid_from = getdate(self.valid_from)
+
+		if valid_from > today_date:
+			return
+
+		for row in self.compliance_category_details:
+			if not row.compliance_sub_category:
+				continue
+
+			sub_cat = frappe.get_doc("Compliance Sub Category", row.compliance_sub_category)
+			if sub_cat.allow_repeat:
+				continue
+
+			if not sub_cat.project_template:
+				continue
+
+			# Check if project already exists for this agreement and subcategory
+			if frappe.db.exists("Project", {
+				"compliance_agreement": self.name,
+				"compliance_sub_category": sub_cat.name
+			}):
+				continue
+
+			# Check if sales order item already exists for this agreement and subcategory
+			if sub_cat.is_billable:
+				linked_so_names = frappe.get_all("Sales Order", filters={"compliance_agreement": self.name, "docstatus": ["<", 2]}, pluck="name")
+				if linked_so_names and frappe.db.exists("Sales Order Item", {
+					"custom_compliance_subcategory": sub_cat.name,
+					"parent": ["in", linked_so_names]
+				}):
+					continue
+
+			try:
+				create_project_from_template(
+					sales_order=None,
+					project_template=sub_cat.project_template,
+					customer=self.customer,
+					company=self.company,
+					compliance_sub_category=sub_cat.name,
+					compliance_category_details_id=row.name,
+					compliance_agreement=self.name,
+					compliance_category=sub_cat.compliance_category or "",
+					compliance_date=today_date
+				)
+				# Update compliance_date on the row
+				row.db_set("compliance_date", today_date)
+			except Exception as e:
+				frappe.log_error(
+					f"Failed to create project for Agreement: {self.name}, Sub Category: {sub_cat.name}",
+					e
+				)
+
 def calculate_next_invoice_date(current_invoice_date, invoice_generation, valid_upto):
 	if invoice_generation == 'Monthly':
 		next_invoice_date = frappe.utils.add_months(current_invoice_date, 1)
@@ -387,15 +446,17 @@ def change_agreement_status_scheduler():
 	agreements = frappe.db.get_all('Compliance Agreement', filters = {'status': ['!=', 'Hold'], 'docstatus': ['!=', 2]})
 	if agreements:
 		for agreement in agreements:
-			self = frappe.get_doc('Compliance Agreement', agreement.name)
-			if self.valid_from:
+			doc = frappe.get_doc('Compliance Agreement', agreement.name)
+			if doc.valid_from:
 				today = getdate(frappe.utils.today())
-			if today < getdate(self.valid_from):
+			if today < getdate(doc.valid_from):
 				frappe.db.set_value('Compliance Agreement', agreement.name, 'status', 'Open')
-			elif ((self.valid_upto and today > getdate(self.valid_upto)) and not self.has_long_term_validity):
+			elif ((doc.valid_upto and today > getdate(doc.valid_upto)) and not doc.has_long_term_validity):
 				frappe.db.set_value('Compliance Agreement', agreement.name, 'status', 'Expired')
 			else:
 				frappe.db.set_value('Compliance Agreement', agreement.name, 'status', 'Active')
+				doc.status = "Active"
+				doc.create_non_repeat_projects()
 				frappe.db.commit()
 			frappe.db.commit()
 
@@ -525,8 +586,24 @@ def create_sales_orders_from_compliance_agreements(posting_date=today()):
 
 			should_create = False
 			if not allow_repeat:
-				if current_date == valid_from:
-					should_create = True
+				if current_date >= valid_from:
+					# Check if project already exists for this agreement and subcategory
+					project_exists = frappe.db.exists("Project", {
+						"compliance_agreement": agreement.name,
+						"compliance_sub_category": sub_cat
+					})
+					# Check if sales order item already exists for this agreement and subcategory
+					so_exists = False
+					if is_billable:
+						linked_so_names = frappe.get_all("Sales Order", filters={"compliance_agreement": agreement.name, "docstatus": ["<", 2]}, pluck="name")
+						if linked_so_names and frappe.db.exists("Sales Order Item", {
+							"custom_compliance_subcategory": sub_cat,
+							"parent": ["in", linked_so_names]
+						}):
+							so_exists = True
+
+					if not project_exists and not so_exists:
+						should_create = True
 			else:
 				month_number = MONTH_MAP.get(repeat_month) if repeat_month else None
 				if repeat_day and current_date.day == cint(repeat_day):
@@ -546,22 +623,25 @@ def create_sales_orders_from_compliance_agreements(posting_date=today()):
 
 			project = None
 			if project_template:
-				if not frappe.db.exists("Project", {
+				project_filters = {
 					"compliance_agreement": agreement.name,
 					"compliance_sub_category": sub_cat,
-					"expected_start_date": current_date
-				}):	
+				}
+				if allow_repeat:
+					project_filters["expected_start_date"] = current_date
+
+				if not frappe.db.exists("Project", project_filters):	
 					project = create_project_from_template(
-					None,
-					project_template,
-					agreement.customer,
-					agreement.company,
-					sub_cat,
-					detail.name,
-					agreement.name,
-					sub_category.compliance_category,
-					posting_date
-				)
+						None,
+						project_template,
+						agreement.customer,
+						agreement.company,
+						sub_cat,
+						detail.name,
+						agreement.name,
+						sub_category.compliance_category,
+						posting_date
+					)
 
 			# === Calculate compliance dates (common for both cases) ===
 			compliance_date = None
@@ -764,7 +844,7 @@ def update_status_on_customer_change(doc, method):
 @frappe.whitelist()
 def create_future_one_time_projects():
 	"""
-	Creates Projects for One-Time Services where valid_from = TODAY
+	Creates Projects for One-Time Services where valid_from <= TODAY
 	"""
 	today_date = getdate(today())
 	agreements = frappe.get_all(
@@ -772,7 +852,7 @@ def create_future_one_time_projects():
 		filters={
 			"docstatus": 1,
 			"status": "Active",      
-			"valid_from": today_date 
+			"valid_from": ["<=", today_date]
 		},
 		fields=["name", "customer", "company", "valid_from"]
 	)
@@ -791,6 +871,13 @@ def create_future_one_time_projects():
 				"compliance_sub_category": sub_cat.name
 			}):
 				continue
+			if sub_cat.is_billable:
+				linked_so_names = frappe.get_all("Sales Order", filters={"compliance_agreement": doc.name, "docstatus": ["<", 2]}, pluck="name")
+				if linked_so_names and frappe.db.exists("Sales Order Item", {
+					"custom_compliance_subcategory": sub_cat.name,
+					"parent": ["in", linked_so_names]
+				}):
+					continue
 			try:
 				create_project_from_template(
 					sales_order=None,
