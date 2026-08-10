@@ -532,14 +532,17 @@ def create_sales_order(project, rate, sub_category_doc, payment_terms=None, subm
 	new_sales_order.company = project.company
 	if payment_terms:
 		new_sales_order.payment_terms_template = payment_terms
-	new_sales_order.append('items', {
+	item_row = {
 		'item_code' : sub_category_doc.item_code,
 		'item_name' : sub_category_doc.sub_category,
 		'rate' : rate,
 		'qty' : 1,
-		'description' : project.custom_project_service,
 		'project' : project.name
-	})
+	}
+	if frappe.db.get_single_value("Compliance Settings", "automatically_set_so_item_desc"):
+		item_row['description'] = project.custom_project_service
+
+	new_sales_order.append('items', item_row)
 	new_sales_order.insert(ignore_permissions=True, ignore_mandatory=True)
 	new_sales_order.submit()
 	frappe.db.set_value("Project", project.name, "sales_order", new_sales_order.name)

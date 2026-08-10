@@ -15,6 +15,7 @@
   "service_item",
   "column_break_begm",
   "create_project_from_sales_order_automatically",
+  "automatically_set_so_item_desc",
   "delete_project_along_with_compliance_agreement",
   "enable_aml_compliance",
   "section_break_saeum",
@@ -186,6 +187,12 @@
    "fieldname": "create_project_from_sales_order_automatically",
    "fieldtype": "Check",
    "label": "Create Project from Sales Order Automatically"
+  },
+  {
+   "default": "0",
+   "fieldname": "automatically_set_so_item_desc",
+   "fieldtype": "Check",
+   "label": "Automatically Set Sales Order Item Description from Project Service"
   },
   {
    "fieldname": "column_break_begm",

@@ -213,10 +213,11 @@ def _create_project(sales_order_doc, compliance_sub_category, project_template_d
 	project.save(ignore_permissions=True)
 
 	if sales_order_doc.name and so_item_name:
-		frappe.db.set_value("Sales Order Item", so_item_name, {
-			"project": project.name,
-			"description": project.custom_project_service
-		})
+		values = {"project": project.name}
+		if frappe.db.get_single_value("Compliance Settings", "automatically_set_so_item_desc"):
+			values["description"] = project.custom_project_service
+
+		frappe.db.set_value("Sales Order Item", so_item_name, values)
 		frappe.db.commit()
 
 	return project
@@ -687,7 +688,41 @@ def set_compliance_fields(doc, method):
 				current_project_service = frappe.db.get_value("Project", item.project, "custom_project_service")
 
 			if current_project_service:
-				item.description = current_project_service
+				if frappe.db.get_single_value("Compliance Settings", "automatically_set_so_item_desc"):
+					# Check if description needs to be overwritten (not manually changed)
+					overwrite = True
+					if item.description:
+						if item.description == current_project_service:
+							overwrite = True
+						elif item.name:
+							# If it's an existing item in the DB
+							db_description = frappe.db.get_value("Sales Order Item", item.name, "description")
+							if db_description == current_project_service:
+								# If DB had current_project_service, but the user modified it in memory
+								if item.description != db_description:
+									overwrite = False
+							else:
+								# DB had something else. If it was a default item description/empty/None, and user didn't modify it in memory
+								item_def_desc = frappe.db.get_value("Item", item.item_code, "description") if item.item_code else None
+								if not db_description or db_description in (item_def_desc, item.get("item_name"), item.get("item_code")):
+									if item.description != db_description and item.description != current_project_service:
+										overwrite = False
+								else:
+									# DB has a custom description already. Keep it.
+									overwrite = False
+						else:
+							# If it's a new item (no item.name) and description is not empty, check if it's default
+							item_def_desc = frappe.db.get_value("Item", item.item_code, "description") if item.item_code else None
+							if item.description not in (item_def_desc, item.get("item_name"), item.get("item_code")):
+								overwrite = False
+
+					if overwrite:
+						item.description = current_project_service
+				else:
+					# Unchecked case: revert to standard item description if it's currently showing project service
+					if item.description == current_project_service:
+						item_def_desc = frappe.db.get_value("Item", item.item_code, "description") if item.item_code else None
+						item.description = item_def_desc or item.item_name or item.item_code
 
 @frappe.whitelist()
 def create_purchase_invoice(docname, items):
