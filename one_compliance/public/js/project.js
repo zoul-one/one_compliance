@@ -6,104 +6,112 @@ frappe.ui.form.on('Project', {
 	},
 
 	refresh(frm) {
-	toggle_is_billable_visibility(frm);
-	if (!frm.is_new()) {
-		setTimeout(() => {
-		frm.remove_custom_button('Duplicate Project with Tasks', 'Actions');
-		frm.remove_custom_button('Set Project Status', 'Actions');
-		});
-	}
-
-	let roles = frappe.user_roles;
-	if (roles.includes('Compliance Manager') || roles.includes('Director')) {
+		toggle_is_billable_visibility(frm);
 		if (!frm.is_new()) {
-		frm.add_custom_button(
-			'Customer Credentials',
-			() => {
-			customer_credentials(frm);
-			},
-			__('View')
-		);
-		frm.add_custom_button(
-			'Customer Documents',
-			() => {
-			customer_documents(frm);
-			},
-			__('View')
-		);
-		}
-	}
-
-	if (!frm.is_new()) {
-		frm.add_custom_button('Set Project Status', () => {
-		update_project_status(frm);
-		});
-	}
-	// Add 'Convert to Premium' button on existing Project
-	if (!frm.is_new() && !frm.doc.is_premium) {
-		frappe.db
-		.get_value(
-			'Compliance Sub Category',
-			frm.doc.compliance_sub_category,
-			'premium_task'
-		)
-		.then((value) => {
-			if (value.message && value.message.premium_task) {
-			frm.add_custom_button(__('Convert to Premium'), function () {
-				frappe.call({
-				method:
-					'one_compliance.one_compliance.doc_events.project.convert_project_to_premium',
-				args: {
-					project: frm.doc.name,
-				},
-				callback: function (r) {
-					if (r.message === 'success') {
-					frappe.msgprint(
-						__('Project converted to Premium successfully.')
-					);
-					frm.reload_doc();
-					} else {
-					frappe.msgprint(
-						__('Failed to convert project to Premium.')
-					);
-					}
-				},
-				});
+			setTimeout(() => {
+			frm.remove_custom_button('Duplicate Project with Tasks', 'Actions');
+			frm.remove_custom_button('Set Project Status', 'Actions');
 			});
-			}
-		});
+		}
 
-		// Add 'Create Tasks' button if no tasks exist
-		frappe.db
-		.count('Task', {
-			filters: { project: frm.doc.name },
-		})
-		.then(function (count) {
-			if (count === 0) {
+		let roles = frappe.user_roles;
+		if (roles.includes('Compliance Manager') || roles.includes('Director')) {
+			if (!frm.is_new()) {
 			frm.add_custom_button(
-				__('Create Tasks'),
+				'Customer Credentials',
+				() => {
+				customer_credentials(frm);
+				},
+				__('View')
+			);
+			frm.add_custom_button(
+				'Customer Documents',
+				() => {
+				customer_documents(frm);
+				},
+				__('View')
+			);
+			}
+		}
+
+		if (!frm.is_new()) {
+			frm.add_custom_button('Set Project Status', () => {
+				update_project_status(frm);
+			});
+
+			frm.add_custom_button(
+				__('Extend Expected End Date'),
 				function () {
-				frappe.call({
-					method:
-					'one_compliance.one_compliance.doc_events.project.create_tasks_from_template',
-					args: { project: frm.doc.name },
-					callback: function (r) {
-					if (!r.exc) {
-						frappe.msgprint(
-						__('Tasks created from Project Template')
-						);
-						frm.reload_doc();
-					}
-					},
-				});
+					extend_expected_end_date(frm);
 				},
 				__('Actions')
 			);
-			}
-		});
-	}
+		}
+		// Add 'Convert to Premium' button on existing Project
+		if (!frm.is_new() && !frm.doc.is_premium) {
+			frappe.db
+			.get_value(
+				'Compliance Sub Category',
+				frm.doc.compliance_sub_category,
+				'premium_task'
+			)
+			.then((value) => {
+				if (value.message && value.message.premium_task) {
+				frm.add_custom_button(__('Convert to Premium'), function () {
+					frappe.call({
+					method:
+						'one_compliance.one_compliance.doc_events.project.convert_project_to_premium',
+					args: {
+						project: frm.doc.name,
+					},
+					callback: function (r) {
+						if (r.message === 'success') {
+						frappe.msgprint(
+							__('Project converted to Premium successfully.')
+						);
+						frm.reload_doc();
+						} else {
+						frappe.msgprint(
+							__('Failed to convert project to Premium.')
+						);
+						}
+					},
+					});
+				});
+				}
+			});
 
-	load_project_tasks(frm);
+			// Add 'Create Tasks' button if no tasks exist
+			frappe.db
+			.count('Task', {
+				filters: { project: frm.doc.name },
+			})
+			.then(function (count) {
+				if (count === 0) {
+				frm.add_custom_button(
+					__('Create Tasks'),
+					function () {
+					frappe.call({
+						method:
+						'one_compliance.one_compliance.doc_events.project.create_tasks_from_template',
+						args: { project: frm.doc.name },
+						callback: function (r) {
+						if (!r.exc) {
+							frappe.msgprint(
+							__('Tasks created from Project Template')
+							);
+							frm.reload_doc();
+						}
+						},
+					});
+					},
+					__('Actions')
+				);
+				}
+			});
+		}
+
+		load_project_tasks(frm);
 	},
 
 	compliance_sub_category(frm) {
@@ -426,4 +434,58 @@ function toggle_is_billable_visibility(frm) {
 	} else {
 		frm.toggle_display('custom_is_billable', false);
 	}
+}
+
+/**
+ * Extends the expected end date of a project and its associated tasks through a dialog interface.
+ */
+function extend_expected_end_date(frm) {
+	let d = new frappe.ui.Dialog({
+		title: __('Extend Expected End Date'),
+		fields: [
+			{
+				fieldname: 'extend_by_days',
+				fieldtype: 'Int',
+				label: __('Extend By (Days)'),
+				reqd: 1,
+				description: __('Enter the number of days to extend the project.')
+			}
+		],
+		primary_action_label: __('Extend'),
+		primary_action(values) {
+			const days = cint(values.extend_by_days);
+
+			if (days <= 0) {
+				frappe.msgprint(
+					__('Extend By (Days) must be greater than 0.')
+				);
+				return;
+			}
+
+			frappe.call({
+				method:
+					'one_compliance.one_compliance.doc_events.project.extend_expected_end_date',
+				args: {
+					project: frm.doc.name,
+					extend_by_days: days
+				},
+				freeze: true,
+				freeze_message: __('Extending project and task dates...'),
+				callback: function (r) {
+					if (!r.exc) {
+						d.hide();
+
+						frappe.show_alert({
+							message: __('Expected End Date extended successfully.'),
+							indicator: 'green'
+						});
+
+						frm.reload_doc();
+					}
+				}
+			});
+		}
+	});
+
+	d.show();
 }
