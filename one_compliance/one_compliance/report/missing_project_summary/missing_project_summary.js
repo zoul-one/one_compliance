@@ -19,22 +19,22 @@ frappe.query_reports["Missing Project Summary"] = {
 			"fieldname": "date_basis",
 			"label": "Date Basis",
 			"fieldtype": "Select",
-			"options": ["Posting Date","Valid Upto","Valid From"]
+			"options": ["Posting Date", "Valid Upto", "Valid From", "Expected Start Date"],
 		},
 		{
 			"fieldname": "from",
 			"label": __("From"),
-			"fieldtype": "Date"
+			"fieldtype": "Date",
 		},
 		{
 			"fieldname": "to",
 			"label": __("To"),
-			"fieldtype": "Date"
+			"fieldtype": "Date",
 		},
 		{
 			"fieldname": "include_expired",
 			"label": __("Include Expired"),
-			"fieldtype": "Check"
-		}
-	]
+			"fieldtype": "Check",
+		},
+	],
 };
