@@ -352,14 +352,17 @@ def create_sales_order_for_project(doc):
 		so.delivery_date = compliance_date or today()
 		so.project = doc.name
 
-		so.append("items", {
+		item_row = {
 			"item_code": item_code,
 			"item_name": item_name,
 			"qty": 1,
 			"rate": rate or 0,
-			"description": doc.custom_project_service if doc.custom_project_service else item_name,
 			"project": doc.name if doc else None
-		})
+		}
+		if frappe.db.get_single_value("Compliance Settings", "automatically_set_so_item_desc"):
+			item_row["description"] = doc.custom_project_service if doc.custom_project_service else item_name
+
+		so.append("items", item_row)
 		so.set_missing_values()
 		so.insert(ignore_permissions=True)
 		so.submit()

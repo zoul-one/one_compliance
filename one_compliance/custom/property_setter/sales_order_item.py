@@ -77,6 +77,14 @@ def get_sales_order_item_property_setters():
 		{
 			"doc_type": "Sales Order Item",
 			"doctype_or_field": "DocField",
+			"field_name": "section_break_5",
+			"property": "collapsed",
+			"property_type": "Check",
+			"value": "0",
+		},
+		{
+			"doc_type": "Sales Order Item",
+			"doctype_or_field": "DocField",
 			"field_name": "drop_ship_section",
 			"property": "hidden",
 			"property_type": "Check",
