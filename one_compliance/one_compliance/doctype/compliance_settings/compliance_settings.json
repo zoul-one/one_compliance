@@ -34,6 +34,9 @@
   "task_template_series",
   "column_break_kqmy",
   "ignore_dependent_task_validation",
+  "project_settings_section",
+  "enable_common_project_extension",
+  "overdue_extension_days",
   "task_management_tool_settings_section",
   "hide_document_icon",
   "hide_credentials_icon",
@@ -492,12 +495,32 @@
    "label": "Service Item",
    "mandatory_depends_on": "eval:doc.enable_referral_commission == 1",
    "options": "Item"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.enable_common_project_extension==1",
+   "description": "Common extension days used as a fallback",
+   "fieldname": "overdue_extension_days",
+   "fieldtype": "Int",
+   "label": "Overdue Extension Days"
+  },
+  {
+   "fieldname": "project_settings_section",
+   "fieldtype": "Section Break",
+   "label": "Project Settings"
+  },
+  {
+   "default": "0",
+   "description": "Enables using the common extension days when the Project Template doesn't specify any",
+   "fieldname": "enable_common_project_extension",
+   "fieldtype": "Check",
+   "label": "Enable Common Project Extension"
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-03-09 09:54:35.506504",
+ "modified": "2026-08-04 16:13:32.144232",
  "modified_by": "Administrator",
  "module": "One Compliance",
  "name": "Compliance Settings",
