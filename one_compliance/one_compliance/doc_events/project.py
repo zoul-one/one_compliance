@@ -1,7 +1,8 @@
 import frappe
 from frappe import _
 from frappe.email.doctype.notification.notification import get_context
-from frappe.utils import add_days, getdate, today
+from frappe.utils import add_days, getdate, today, cint, get_first_day, get_last_day
+
 from one_compliance.one_compliance.utils import create_todo
 from one_compliance.one_compliance.doc_events.task import (
 	create_sales_order,
@@ -12,7 +13,6 @@ from one_compliance.one_compliance.utils import (
 	create_project_completion_todos,
 	send_notification,
 )
-
 def validate(doc, method=None):
 	set_is_billable(doc)
 
@@ -107,71 +107,71 @@ def set_project_status(project, status, comment=None):
 @frappe.whitelist()
 def set_status_to_overdue():
 
-    projects = frappe.get_all(
-        "Project",
-        filters={
-            "status": ["not in", ["Cancelled", "Hold", "Completed", "Invoiced", "Partially Paid", "Paid"]]
-        },
-        fields=["name", "expected_end_date", "project_template"],
-    )
+	projects = frappe.get_all(
+		"Project",
+		filters={
+			"status": ["not in", ["Cancelled", "Hold", "Completed", "Invoiced", "Partially Paid", "Paid"]]
+		},
+		fields=["name", "expected_end_date", "project_template"],
+	)
 
-    today_date = getdate(today())
-    settings = frappe.get_single("Compliance Settings")
+	today_date = getdate(today())
+	settings = frappe.get_single("Compliance Settings")
 
-    for project in projects:
-        if not project.expected_end_date or today_date <= getdate(project.expected_end_date):
-            continue
+	for project in projects:
+		if not project.expected_end_date or today_date <= getdate(project.expected_end_date):
+			continue
 
-        if not frappe.db.exists(
-            "Task",
-            {
-                "project": project.name,
-                "status": ["not in", ["Completed", "Cancelled", "Hold"]],
-            },
-        ):
-            continue
+		if not frappe.db.exists(
+			"Task",
+			{
+				"project": project.name,
+				"status": ["not in", ["Completed", "Cancelled", "Hold"]],
+			},
+		):
+			continue
 
-        try:
-            doc = frappe.get_doc("Project", project.name)
-            extension_days = 0
-            project_template = doc.project_template
+		try:
+			doc = frappe.get_doc("Project", project.name)
+			extension_days = 0
+			project_template = doc.project_template
 
-            if not project_template and doc.compliance_sub_category:
-                project_template = frappe.db.get_value(
-                    "Compliance Sub Category",
-                    doc.compliance_sub_category,
-                    "project_template",
-                )
+			if not project_template and doc.compliance_sub_category:
+				project_template = frappe.db.get_value(
+					"Compliance Sub Category",
+					doc.compliance_sub_category,
+					"project_template",
+				)
 
-            if project_template:
-                template = frappe.get_doc("Project Template", project_template)
+			if project_template:
+				template = frappe.get_doc("Project Template", project_template)
 
-                if template.overdue_extension_days and template.overdue_extension_days > 0:
-                    extension_days = template.overdue_extension_days
-                elif template.enable_project_extension:
-                    if (
-                        settings.enable_common_project_extension
-                        and settings.overdue_extension_days
-                        and settings.overdue_extension_days > 0
-                    ):
-                        extension_days = settings.overdue_extension_days
+				if template.overdue_extension_days and template.overdue_extension_days > 0:
+					extension_days = template.overdue_extension_days
+				elif template.enable_project_extension:
+					if (
+						settings.enable_common_project_extension
+						and settings.overdue_extension_days
+						and settings.overdue_extension_days > 0
+					):
+						extension_days = settings.overdue_extension_days
 
-            if extension_days:
-                old_date = doc.expected_end_date
-                new_date = add_days(old_date, extension_days)
-                frappe.db.set_value("Project", doc.name, "expected_end_date", new_date)
-                frappe.db.set_value("Project", doc.name, "status", "Open")
-                frappe.db.set_value("Project", doc.name, "is_overdue", 1)
-                doc.add_comment(
-                    "Comment",
-                    text=f"Expected End Date was automatically changed from {old_date} to {new_date} based on the configured Overdue Extension Days.",
-                )
-            else:
-                frappe.db.set_value("Project", doc.name, "status", "Overdue")
-                frappe.db.set_value("Project", doc.name, "is_overdue", 1)
-        except Exception:
-            frappe.log_error(frappe.get_traceback(), f"set_status_to_overdue failed for project {project.name}")
-            continue
+			if extension_days:
+				old_date = doc.expected_end_date
+				new_date = add_days(old_date, extension_days)
+				frappe.db.set_value("Project", doc.name, "expected_end_date", new_date)
+				frappe.db.set_value("Project", doc.name, "status", "Open")
+				frappe.db.set_value("Project", doc.name, "is_overdue", 1)
+				doc.add_comment(
+					"Comment",
+					text=f"Expected End Date was automatically changed from {old_date} to {new_date} based on the configured Overdue Extension Days.",
+				)
+			else:
+				frappe.db.set_value("Project", doc.name, "status", "Overdue")
+				frappe.db.set_value("Project", doc.name, "is_overdue", 1)
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), f"set_status_to_overdue failed for project {project.name}")
+			continue
 
 @frappe.whitelist()
 def get_permission_query_conditions(user=None):
@@ -383,45 +383,265 @@ def create_commission_purchase_invoice(doc):
 		frappe.db.set_value("Customer", customer.name, "reference_completed", 1)
 
 def create_sales_order_for_project(doc):
+	"""
+		Creates a Sales Order for a Project based on its Compliance Sub Category and Agreement.
+	"""
 	try:
-		if doc.compliance_sub_category:
-			item_code = frappe.db.get_value("Compliance Sub Category", doc.compliance_sub_category, "item_code")
-			item_name = frappe.db.get_value("Item", item_code, "item_name") if item_code else None
-			if not item_code:
-				frappe.throw(_("Item Code not found for Compliance Sub Category: {0}").format(doc.compliance_sub_category))
+		if not doc.compliance_sub_category:
+			return
+
+		if not doc.compliance_agreement:
+			return
+
+		sub_category = frappe.db.get_value(
+			"Compliance Sub Category",
+			doc.compliance_sub_category,
+			["item_code", "is_billable", "compliance_category"],
+			as_dict=True,
+		)
+
+		if not sub_category:
+			return
+
+		if not sub_category.is_billable:
+			return
+
+		item_code = sub_category.item_code
+
+		if not item_code:
+			frappe.throw(
+				_("Item Code not found for Compliance Sub Category: {0}").format(
+					doc.compliance_sub_category
+				)
+			)
+
+		item_name = frappe.db.get_value(
+			"Item",
+			item_code,
+			"item_name",
+		)
+
+		item_uom = frappe.db.get_value(
+			"Item",
+			item_code,
+			"stock_uom",
+		)
+
+		if not item_uom:
+			frappe.throw(
+				_("Stock UOM not found for Item: {0}").format(item_code)
+			)
+
+		agreement = frappe.db.get_value(
+			"Compliance Agreement",
+			doc.compliance_agreement,
+			[
+				"customer",
+				"company",
+				"invoice_based_on",
+				"invoice_generation",
+			],
+			as_dict=True,
+		)
+
+		if not agreement:
+			return
+
 		rate, compliance_date = frappe.db.get_value(
 			"Compliance Category Details",
 			{
 				"parent": doc.compliance_agreement,
 				"compliance_sub_category": doc.compliance_sub_category,
-		},
-			["rate", "compliance_date"]
+			},
+			["rate", "compliance_date"],
 		)
-		so = frappe.new_doc("Sales Order")
-		so.customer = doc.customer
-		so.company = doc.company
-		so.compliance_agreement = doc.compliance_agreement
-		so.compliance_sub_category = doc.compliance_sub_category
-		so.transaction_date = compliance_date or today()
-		so.delivery_date = compliance_date or today()
-		so.project = doc.name
+
+		compliance_date = (
+			compliance_date
+			or doc.expected_start_date
+			or today()
+		)
+
+		compliance_date = getdate(compliance_date)
 
 		item_row = {
 			"item_code": item_code,
 			"item_name": item_name,
 			"qty": 1,
+			"uom": item_uom,
+			"conversion_factor": 1,
 			"rate": rate or 0,
-			"project": doc.name if doc else None
+			"project": doc.name,
+			"custom_compliance_category": sub_category.compliance_category,
+			"custom_compliance_subcategory": doc.compliance_sub_category,
 		}
-		if frappe.db.get_single_value("Compliance Settings", "automatically_set_so_item_desc"):
-			item_row["description"] = doc.custom_project_service if doc.custom_project_service else item_name
+
+		if frappe.db.get_single_value(
+			"Compliance Settings",
+			"automatically_set_so_item_desc",
+		):
+			item_row["description"] = (
+				doc.custom_project_service
+				if doc.custom_project_service
+				else item_name
+			)
+
+		if (
+			agreement.invoice_based_on == "Consolidated"
+			and agreement.invoice_generation == "Monthly"
+		):
+			month_start = get_first_day(compliance_date)
+			month_end = get_last_day(compliance_date)
+
+			existing_sales_order = frappe.db.get_value(
+				"Sales Order",
+				{
+					"customer": agreement.customer,
+					"company": agreement.company,
+					"compliance_agreement": doc.compliance_agreement,
+					"transaction_date": [
+						"between",
+						[month_start, month_end],
+					],
+					"docstatus": 1,
+				},
+				"name",
+				order_by="creation asc",
+			)
+
+			if existing_sales_order:
+				so = frappe.get_doc(
+					"Sales Order",
+					existing_sales_order,
+				)
+
+				for item in so.items:
+					if item.project == doc.name:
+						doc.db_set(
+							"sales_order",
+							so.name,
+						)
+						return
+
+				so.append("items", item_row)
+
+				# Sales Order is already submitted.
+				# Allow adding the new item after submission.
+				so.flags.ignore_validate_update_after_submit = True
+
+				so.save(ignore_permissions=True)
+
+				doc.db_set(
+					"sales_order",
+					so.name,
+				)
+
+				return
+
+		so = frappe.new_doc("Sales Order")
+
+		so.customer = agreement.customer
+		so.company = agreement.company
+		so.compliance_agreement = doc.compliance_agreement
+		so.compliance_sub_category = doc.compliance_sub_category
+		so.transaction_date = compliance_date
+		so.delivery_date = compliance_date
+		so.project = doc.name
 
 		so.append("items", item_row)
+
 		so.set_missing_values()
 		so.insert(ignore_permissions=True)
 		so.submit()
-		doc.db_set("sales_order", so.name)
 
+		doc.db_set(
+			"sales_order",
+			so.name,
+		)
 
 	except Exception:
-		frappe.log_error(frappe.get_traceback(), f"SO Creation Failed - {doc.name}")
+		frappe.log_error(
+			frappe.get_traceback(),
+			f"SO Creation Failed - {doc.name}",
+		)
+
+@frappe.whitelist()
+def extend_expected_end_date(project, extend_by_days):
+	"""
+		Extends the expected end date of a project and its associated tasks by a specified number of days.
+	"""
+	extend_by_days = cint(extend_by_days)
+
+	if extend_by_days <= 0:
+		frappe.throw(_("Extend By (Days) must be greater than 0."))
+
+	project_doc = frappe.get_doc("Project", project)
+
+	if not project_doc.expected_end_date:
+		frappe.throw(_("Project does not have an Expected End Date."))
+
+	old_project_end_date = project_doc.expected_end_date
+
+	new_project_end_date = add_days(
+		project_doc.expected_end_date,
+		extend_by_days
+	)
+
+	project_doc.db_set(
+		"expected_end_date",
+		new_project_end_date,
+		update_modified=True
+	)
+
+	tasks = frappe.get_all(
+		"Task",
+		filters={
+			"project": project_doc.name
+		},
+		fields=[
+			"name",
+			"exp_end_date"
+		]
+	)
+
+	updated_tasks = 0
+
+	for task in tasks:
+		if not task.exp_end_date:
+			continue
+
+		new_task_end_date = add_days(
+			task.exp_end_date,
+			extend_by_days
+		)
+
+		frappe.db.set_value(
+			"Task",
+			task.name,
+			"exp_end_date",
+			new_task_end_date,
+			update_modified=True
+		)
+
+		updated_tasks += 1
+
+	project_doc.add_comment(
+		"Comment",
+		_(
+			"Expected End Date extended from {0} to {1} by {2} day(s). "
+			"{3} task(s) were extended accordingly."
+		).format(
+			old_project_end_date,
+			new_project_end_date,
+			extend_by_days,
+			updated_tasks
+		)
+	)
+
+	return {
+		"project": project_doc.name,
+		"old_project_end_date": old_project_end_date,
+		"new_project_end_date": new_project_end_date,
+		"extend_by_days": extend_by_days,
+		"updated_tasks": updated_tasks
+	}
