@@ -299,10 +299,14 @@ override_doctype_dashboards = {
 #	"one_compliance.auth.validate"
 # ]
 fixtures = [
-	{
-		"dt": "Custom HTML Block",
-		"filters": [
-			["name", "in", ["Employee Management", "Employee Management"]]
-		]
-	}
+    {
+        "dt": "Custom HTML Block",
+        "filters": [
+            ["name", "in", [
+                "Employee Management",
+                "Compliance",
+                "Quick Actions"
+            ]]
+        ]
+    }
 ]

@@ -1,0 +1,20 @@
+{
+ "cards": [],
+ "charts": [
+  {
+   "width": "Half"
+  }
+ ],
+ "creation": "2026-08-11 00:59:52.561698",
+ "dashboard_name": "One Compliance",
+ "docstatus": 0,
+ "doctype": "Dashboard",
+ "idx": 0,
+ "is_default": 0,
+ "is_standard": 1,
+ "modified": "2026-08-11 00:59:52.561698",
+ "modified_by": "Administrator",
+ "module": "One Compliance",
+ "name": "One Compliance",
+ "owner": "Administrator"
+}
