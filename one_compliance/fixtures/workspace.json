@@ -1,0 +1,50 @@
+[
+ {
+  "app": null,
+  "charts": [],
+  "content": "[{\"id\":\"U2W4RXttQ4\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Welcome to the Executive Dashboard workspace</span>\",\"col\":12}},{\"id\":\"d1LDAxFh6j\",\"type\":\"paragraph\",\"data\":{\"text\":\"Click on \\n\\t\\t\\t\\n\\t\\t\\t\\n\\t\\t to edit\",\"col\":12}},{\"id\":\"P3b3Rf_SoI\",\"type\":\"custom_block\",\"data\":{\"custom_block_name\":\"Work Overview\",\"col\":12}},{\"id\":\"krPGX9jho3\",\"type\":\"custom_block\",\"data\":{\"custom_block_name\":\"Weekly Working Hours\",\"col\":12}},{\"id\":\"bbM9syK8bb\",\"type\":\"custom_block\",\"data\":{\"custom_block_name\":\"Assigned Task Details\",\"col\":12}},{\"id\":\"hrlarTieUB\",\"type\":\"custom_block\",\"data\":{\"custom_block_name\":\"Capability & Performance\",\"col\":12}}]",
+  "custom_blocks": [
+   {
+    "custom_block_name": "Work Overview",
+    "label": "Work Overview"
+   },
+   {
+    "custom_block_name": "Weekly Working Hours",
+    "label": "Weekly Working Hours"
+   },
+   {
+    "custom_block_name": "Assigned Task Details",
+    "label": "Assigned Task Details"
+   },
+   {
+    "custom_block_name": "Capability & Performance",
+    "label": "Capability & Performance"
+   }
+  ],
+  "docstatus": 0,
+  "doctype": "Workspace",
+  "external_link": null,
+  "for_user": null,
+  "hide_custom": 0,
+  "icon": null,
+  "indicator_color": "green",
+  "is_hidden": 0,
+  "label": "Executive Dashboard",
+  "link_to": null,
+  "link_type": "DocType",
+  "links": [],
+  "modified": "2026-09-01 17:37:55.698382",
+  "module": null,
+  "name": "Executive Dashboard",
+  "number_cards": [],
+  "parent_page": null,
+  "public": 1,
+  "quick_lists": [],
+  "restrict_to_domain": null,
+  "roles": [],
+  "sequence_id": 0.0,
+  "shortcuts": [],
+  "title": "Executive Dashboard",
+  "type": "Workspace"
+ }
+]

@@ -304,5 +304,30 @@ fixtures = [
 		"filters": [
 			["name", "in", ["Employee Management", "Employee Management"]]
 		]
-	}
+	},
+    {
+        "dt": "Custom HTML Block",
+        "filters": [
+            [
+                "name",
+                "in",
+                [
+                    "Work Overview",
+                    "Weekly Working Hours",
+                    "Assigned Task Details",
+                    "Capability & Performance",
+                ],
+            ]
+        ],
+    },
+    {
+        "dt": "Workspace",
+        "filters": [
+            [
+                "name",
+                "=",
+                "Executive Dashboard",
+            ]
+        ],
+    },
 ]
