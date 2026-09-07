@@ -688,40 +688,73 @@ def on_task_update(doc, method=None):
 	if doc.status != "Completed" or doc.readiness_status != "Ready":
 		return
 
+	if not doc.project:
+		return
+
 	project = frappe.get_doc("Project", doc.project)
-	if not project.compliance_sub_category:
+	sub_category = project.compliance_sub_category or doc.compliance_sub_category
+	project_template_name = None
+
+	if sub_category:
+		project_template_name = frappe.db.get_value("Compliance Sub Category", sub_category, "project_template")
+
+	if not project_template_name and hasattr(project, "project_template"):
+		project_template_name = project.project_template
+
+	if not project_template_name:
 		return
 
-	compliance_subcategory = frappe.get_doc("Compliance Sub Category", project.compliance_sub_category)
-	if not compliance_subcategory.project_template:
+	project_template = frappe.get_doc("Project Template", project_template_name)
+	if not project_template.enable_task_readiness_flow:
 		return
 
-	project_template = frappe.get_doc("Project Template", compliance_subcategory.project_template)
-	template_task_subjects = [task.subject for task in project_template.tasks]
+	# Determine next task primarily by the project's own task sequence (custom_serial_number 1, 2, 3...)
+	next_task = None
 
-	try:
-		current_index = template_task_subjects.index(doc.subject)
-		if current_index + 1 < len(template_task_subjects):
-			next_subject = template_task_subjects[current_index + 1]
-
-			next_task = frappe.get_all(
+	if doc.custom_serial_number:
+		try:
+			current_serial = int(doc.custom_serial_number)
+			higher_serial_tasks = frappe.get_all(
 				"Task",
 				filters={
 					"project": doc.project,
-					"subject": next_subject,
+					"name": ["!=", doc.name],
 					"readiness_status": ["!=", "Ready"],
 					"status": ["not in", ["Completed", "Cancelled"]]
 				},
-				fields=["name", "readiness_status"],
-				order_by="creation asc",
-				limit=1
+				fields=["name", "custom_serial_number", "readiness_status"],
+				order_by="CAST(custom_serial_number AS UNSIGNED) asc, creation asc"
 			)
+			for t in higher_serial_tasks:
+				if t.custom_serial_number:
+					try:
+						if int(t.custom_serial_number) > current_serial:
+							next_task = t
+							break
+					except ValueError:
+						pass
+		except ValueError:
+			pass
 
-			if next_task:
-				frappe.db.set_value("Task", next_task[0].name, "readiness_status", "Ready")
+	# Fallback: find the earliest incomplete, non-ready task in the project
+	if not next_task:
+		fallback_tasks = frappe.get_all(
+			"Task",
+			filters={
+				"project": doc.project,
+				"name": ["!=", doc.name],
+				"readiness_status": ["!=", "Ready"],
+				"status": ["not in", ["Completed", "Cancelled"]]
+			},
+			fields=["name", "readiness_status"],
+			order_by="CAST(custom_serial_number AS UNSIGNED) asc, creation asc",
+			limit=1
+		)
+		if fallback_tasks:
+			next_task = fallback_tasks[0]
 
-	except ValueError:
-		pass
+	if next_task:
+		frappe.db.set_value("Task", next_task.name, "readiness_status", "Ready")
 
 @frappe.whitelist()
 def check_readiness_edit_permission(user):
