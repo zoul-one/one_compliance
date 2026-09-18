@@ -999,18 +999,25 @@ Opens a dialog to update the status of a specific task and refreshes the task li
 
 function update_status(page, task_name, project_id, task_id) {
 	frappe.call({
-		method: "one_compliance.one_compliance.page.task_management_tool.task_management_tool.get_active_timer",
+		method: "one_compliance.one_compliance.page.task_management_tool.task_management_tool.get_active_timer_for_task",
+		args: { task: task_id },
 		callback: function(r) {
-
-			const active_timers = r.message || [];
-			const is_running = active_timers.some(t => t.task === task_id);
-
-			if (is_running) {
-				frappe.msgprint({
-					title: __("Not Allowed"),
-					message: __("This task is currently running. Please stop the timer before marking it as Completed."),
-					indicator: "red"
-				});
+			if (r.message) {
+				const active_timer = r.message;
+				if (active_timer.user === frappe.session.user) {
+					frappe.msgprint({
+						title: __("Not Allowed"),
+						message: __("This task is currently running. Please stop the timer before marking it as Completed."),
+						indicator: "red",
+					});
+				} else {
+					const person = active_timer.full_name || active_timer.user;
+					frappe.msgprint({
+						title: __("Not Allowed"),
+						message: __("{0} is working on it.", [person]),
+						indicator: "red",
+					});
+				}
 				return;
 			}
 			frappe.model.with_doctype('Task', () => {

@@ -79,6 +79,7 @@ class CustomTask(NestedSet):
 			return ret
 
 	def validate(self):
+		self.validate_active_timer()
 		self.validate_dates()
 		self.validate_progress()
 		self.validate_status()
@@ -337,6 +338,21 @@ class CustomTask(NestedSet):
 						title=_("Checklist Incomplete"),
 						msg=_("Please complete the checklist item <b>`{0}`</b> before marking the task <b>`{1}`</b> as Completed".format(item.checklist_item, self.name))
 					)
+
+	def validate_active_timer(self):
+		if self.status == "Completed":
+			active_timer = frappe.db.get_value(
+				"Active Task Timer",
+				{"task": self.name},
+				["user", "full_name"],
+				as_dict=True,
+			)
+			if active_timer:
+				if active_timer.user == frappe.session.user:
+					frappe.throw(_("This task is currently running. Please stop the timer before marking it as Completed."))
+				else:
+					person = active_timer.full_name or active_timer.user
+					frappe.throw(_("{0} is working on it.").format(person))
 
 @frappe.whitelist()
 def set_tasks_as_overdue():
