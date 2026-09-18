@@ -177,51 +177,75 @@ let customer_document = function (frm) {
 };
 
 let update_status = function (frm) {
-	let d = new frappe.ui.Dialog({
-		title: "Enter details",
-		fields: [
-			{
-				label: "Status",
-				fieldname: "status",
-				fieldtype: "Select",
-				options: "Open\nWorking\nPending Review\nCompleted\nHold",
-				default: "Completed",
-			},
-			{
-				label: "Completed By",
-				fieldname: "completed_by",
-				fieldtype: "Link",
-				options: "User",
-			},
-			{
-				label: "Completed On",
-				fieldname: "completed_on",
-				fieldtype: "Date",
-				default: "Today",
-			},
-		],
-		primary_action_label: "Update",
-		primary_action(values) {
-			frappe.call({
-				method:
-					"one_compliance.one_compliance.doc_events.task.update_task_status",
-				args: {
-					task_id: frm.doc.name,
-					status: values.status,
-					completed_by: values.completed_by,
-					completed_on: values.completed_on,
-				},
-				callback: function (r) {
-					if (r.message) {
-						d.hide();
-						frm.reload_doc();
-					}
+	frappe.call({
+		method: "one_compliance.one_compliance.page.task_management_tool.task_management_tool.get_active_timer_for_task",
+		args: { task: frm.doc.name },
+		callback: function (r) {
+			if (r.message) {
+				const active_timer = r.message;
+				if (active_timer.user === frappe.session.user) {
+					frappe.msgprint({
+						title: __("Not Allowed"),
+						message: __("This task is currently running. Please stop the timer before marking it as Completed."),
+						indicator: "red",
+					});
+				} else {
+					const person = active_timer.full_name || active_timer.user;
+					frappe.msgprint({
+						title: __("Not Allowed"),
+						message: __("{0} is working on it.", [person]),
+						indicator: "red",
+					});
+				}
+				return;
+			}
+			let d = new frappe.ui.Dialog({
+				title: "Enter details",
+				fields: [
+					{
+						label: "Status",
+						fieldname: "status",
+						fieldtype: "Select",
+						options: "Open\nWorking\nPending Review\nCompleted\nHold",
+						default: "Completed",
+					},
+					{
+						label: "Completed By",
+						fieldname: "completed_by",
+						fieldtype: "Link",
+						options: "User",
+					},
+					{
+						label: "Completed On",
+						fieldname: "completed_on",
+						fieldtype: "Date",
+						default: "Today",
+					},
+				],
+				primary_action_label: "Update",
+				primary_action(values) {
+					frappe.call({
+						method:
+							"one_compliance.one_compliance.doc_events.task.update_task_status",
+						args: {
+							task_id: frm.doc.name,
+							status: values.status,
+							completed_by: values.completed_by,
+							completed_on: values.completed_on,
+						},
+						callback: function (r) {
+							if (r.message) {
+								d.hide();
+								frm.reload_doc();
+							}
+						},
+					});
 				},
 			});
+			d.set_value("completed_by", frappe.session.user);
+			d.show();
 		},
 	});
-	d.set_value("completed_by", frappe.session.user);
-	d.show();
 };
 
 function handle_task_checklist(frm) {
@@ -462,8 +486,8 @@ function save_checklist(frm, checklist_items, dialog) {
 		let row = frm.add_child('task_checklist_template');
 		row.checklist_item = item.checklist_item;
 		row.completed = item.completed;
-        row.completed_on = item.completed ? frappe.datetime.now_date() : null;
-        row.completed_by = item.completed ? frappe.session.user : null;
+		row.completed_on = item.completed ? frappe.datetime.now_date() : null;
+		row.completed_by = item.completed ? frappe.session.user : null;
 		row.idx = item.idx;
 	});
 
