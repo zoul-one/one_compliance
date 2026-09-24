@@ -2,234 +2,6 @@ def get_role_profile_fixtures():
 	return [
 		{
 			"doctype": "Role Profile",
-			"name": "Inventory",
-			"role_profile": "Inventory",
-			"roles": [
-				{
-					"parent": "Inventory",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Stock User",
-				},
-				{
-					"parent": "Inventory",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Stock Manager",
-				},
-				{
-					"parent": "Inventory",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Item Manager",
-				},
-				{
-					"parent": "Inventory",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Employee",
-				},
-				{
-					"parent": "Inventory",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Employee Self Service",
-				},
-			],
-		},
-		{
-			"doctype": "Role Profile",
-			"name": "Manufacturing",
-			"role_profile": "Manufacturing",
-			"roles": [
-				{
-					"parent": "Manufacturing",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Stock User",
-				},
-				{
-					"parent": "Manufacturing",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Manufacturing User",
-				},
-				{
-					"parent": "Manufacturing",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Manufacturing Manager",
-				},
-				{
-					"parent": "Manufacturing",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Employee",
-				},
-				{
-					"parent": "Manufacturing",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Employee Self Service",
-				},
-			],
-		},
-		{
-			"doctype": "Role Profile",
-			"name": "Accounts",
-			"role_profile": "Accounts",
-			"roles": [
-				{
-					"parent": "Accounts",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Accounts User",
-				},
-				{
-					"parent": "Accounts",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Accounts Manager",
-				},
-				{
-					"parent": "Accounts",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Employee",
-				},
-				{
-					"parent": "Accounts",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Employee Self Service",
-				},
-			],
-		},
-		{
-			"doctype": "Role Profile",
-			"name": "Sales",
-			"role_profile": "Sales",
-			"roles": [
-				{
-					"parent": "Sales",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Sales User",
-				},
-				{
-					"parent": "Sales",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Stock User",
-				},
-				{
-					"parent": "Sales",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Sales Manager",
-				},
-				{
-					"parent": "Sales",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Employee",
-				},
-				{
-					"parent": "Sales",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Employee Self Service",
-				},
-			],
-		},
-		{
-			"doctype": "Role Profile",
-			"name": "Purchase",
-			"role_profile": "Purchase",
-			"roles": [
-				{
-					"parent": "Purchase",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Item Manager",
-				},
-				{
-					"parent": "Purchase",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Stock User",
-				},
-				{
-					"parent": "Purchase",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Purchase User",
-				},
-				{
-					"parent": "Purchase",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Purchase Manager",
-				},
-				{
-					"parent": "Purchase",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Employee",
-				},
-				{
-					"parent": "Purchase",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Employee Self Service",
-				},
-			],
-		},
-		{
-			"doctype": "Role Profile",
-			"name": "HR",
-			"role_profile": "HR",
-			"roles": [
-				{
-					"parent": "HR",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "HR User",
-				},
-				{
-					"parent": "HR",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "HR Manager",
-				},
-				{
-					"parent": "HR",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Leave Approver",
-				},
-				{
-					"parent": "HR",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Expense Approver",
-				},
-				{
-					"parent": "HR",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Employee",
-				},
-				{
-					"parent": "HR",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Employee Self Service",
-				},
-			],
-		},
-		{
-			"doctype": "Role Profile",
 			"name": "Consultant",
 			"role_profile": "Consultant ",
 			"roles": [
@@ -431,18 +203,6 @@ def get_role_profile_fixtures():
 					"parent": "Super Admin",
 					"parentfield": "roles",
 					"parenttype": "Role Profile",
-					"role": "Agriculture Manager",
-				},
-				{
-					"parent": "Super Admin",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Agriculture User",
-				},
-				{
-					"parent": "Super Admin",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
 					"role": "Analytics",
 				},
 				{
@@ -450,12 +210,6 @@ def get_role_profile_fixtures():
 					"parentfield": "roles",
 					"parenttype": "Role Profile",
 					"role": "Auditor",
-				},
-				{
-					"parent": "Super Admin",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Blogger",
 				},
 				{
 					"parent": "Super Admin",
@@ -491,18 +245,6 @@ def get_role_profile_fixtures():
 					"parent": "Super Admin",
 					"parentfield": "roles",
 					"parenttype": "Role Profile",
-					"role": "Fleet Manager",
-				},
-				{
-					"parent": "Super Admin",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Fulfillment User",
-				},
-				{
-					"parent": "Super Admin",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
 					"role": "Head Of Department",
 				},
 				{
@@ -521,12 +263,6 @@ def get_role_profile_fixtures():
 					"parent": "Super Admin",
 					"parentfield": "roles",
 					"parenttype": "Role Profile",
-					"role": "Inbox User",
-				},
-				{
-					"parent": "Super Admin",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
 					"role": "Item Manager",
 				},
 				{
@@ -534,48 +270,6 @@ def get_role_profile_fixtures():
 					"parentfield": "roles",
 					"parenttype": "Role Profile",
 					"role": "Knowledge Base Contributor",
-				},
-				{
-					"parent": "Super Admin",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Knowledge Base Editor",
-				},
-				{
-					"parent": "Super Admin",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Maintenance Manager",
-				},
-				{
-					"parent": "Super Admin",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Maintenance User",
-				},
-				{
-					"parent": "Super Admin",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Manufacturing Manager",
-				},
-				{
-					"parent": "Super Admin",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Manufacturing User",
-				},
-				{
-					"parent": "Super Admin",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Newsletter Manager",
-				},
-				{
-					"parent": "Super Admin",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Prepared Report User",
 				},
 				{
 					"parent": "Super Admin",
@@ -647,12 +341,6 @@ def get_role_profile_fixtures():
 					"parent": "Super Admin",
 					"parentfield": "roles",
 					"parenttype": "Role Profile",
-					"role": "Stock Manager",
-				},
-				{
-					"parent": "Super Admin",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
 					"role": "Stock User",
 				},
 				{
@@ -660,12 +348,6 @@ def get_role_profile_fixtures():
 					"parentfield": "roles",
 					"parenttype": "Role Profile",
 					"role": "Supplier",
-				},
-				{
-					"parent": "Super Admin",
-					"parentfield": "roles",
-					"parenttype": "Role Profile",
-					"role": "Support Team",
 				},
 				{
 					"parent": "Super Admin",
