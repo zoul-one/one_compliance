@@ -386,7 +386,6 @@ def update_expected_dates_in_task(doc):
 		doc.exp_start_date = frappe.utils.today()
 		doc.exp_end_date = add_days(doc.exp_start_date, doc.duration)
 		doc.save()
-	frappe.db.commit()
 
 def add_project_user_if_not_exists(project, user_id):
 	project_doc = frappe.get_doc('Project', project)
@@ -477,7 +476,6 @@ def set_task_time_line(doc):
 	if doc.duration and doc.exp_start_date:
 		exp_end_date = add_days(doc.exp_start_date, doc.duration)
 		doc.db_set('exp_end_date', exp_end_date, update_modified=False)
-		frappe.db.commit()
 
 @frappe.whitelist()
 def make_sales_invoice(doc, method):
