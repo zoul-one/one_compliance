@@ -298,36 +298,38 @@ override_doctype_dashboards = {
 # auth_hooks = [
 #	"one_compliance.auth.validate"
 # ]
+
 fixtures = [
 	{
 		"dt": "Custom HTML Block",
 		"filters": [
-			["name", "in", ["Employee Management", "Employee Management"]]
-		]
+			[
+				"name",
+				"in",
+				[
+					"Work Overview",
+					"Weekly Working Hours",
+					"Assigned Task Details",
+					"Capability & Performance",
+					"Associate Performance Summary",
+					"My Priority Workboard.",
+					"Executive Supervision Summary",
+					"Executive-wise Project Status",
+				],
+			]
+		],
 	},
-    {
-        "dt": "Custom HTML Block",
-        "filters": [
-            [
-                "name",
-                "in",
-                [
-                    "Work Overview",
-                    "Weekly Working Hours",
-                    "Assigned Task Details",
-                    "Capability & Performance",
-                ],
-            ]
-        ],
-    },
-    {
-        "dt": "Workspace",
-        "filters": [
-            [
-                "name",
-                "=",
-                "Executive Dashboard",
-            ]
-        ],
-    },
+	{
+		"dt": "Workspace",
+		"filters": [
+			[
+				"name",
+				"in",
+				[
+					"Executive Dashboard",
+					"Associate Dashboard",
+				],
+			]
+		],
+	},
 ]
