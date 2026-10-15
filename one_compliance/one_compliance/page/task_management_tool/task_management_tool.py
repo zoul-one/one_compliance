@@ -453,3 +453,17 @@ def create_event_from_tool(subject, event_category, start_time, company, ends_on
 @frappe.whitelist()
 def get_timer_click_setting():
 	return bool(frappe.db.get_single_value("Compliance Settings", "filter_working_status_on_timer_click"))
+
+@frappe.whitelist()
+def get_active_timer_for_task(task):
+	"""
+		Retrieve active timer details for a given task across all users.
+	"""
+	if not task:
+		return None
+	return frappe.db.get_value(
+		"Active Task Timer",
+		{"task": task},
+		["name", "user", "full_name", "subject"],
+		as_dict=True,
+	)

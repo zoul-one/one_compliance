@@ -452,30 +452,51 @@ def delete_linked_records(sales_order):
 	Deletes all records linked with the specified sales order.
 
 	Args:
-	project (str): The name of the project to delete linked records for.
+		sales_order (str): The name of the sales order to delete linked records for.
 	"""
-	sales_invoice = frappe.db.get_value(
-		"Sales Invoice Item", {"sales_order": sales_order}, "parent"
-	)
-	if frappe.db.exists("Sales Invoice", sales_invoice):
-		frappe.throw("Cannot proceed with this operation as it is invoiced")
+	if check_if_sales_invoice_exists(sales_order):
+		frappe.throw(_("Cannot proceed with this operation as it is invoiced"))
 
-	project = frappe.db.get_value("Sales Order", sales_order, "project")
+	projects = set()
+	so_project = frappe.db.get_value("Sales Order", sales_order, "project")
+	if so_project:
+		projects.add(so_project)
 
-	if frappe.db.exists("Project", project):
-		linked_tasks = frappe.get_all("Task", filters={"project": project})
-		for task in linked_tasks:
-			frappe.delete_doc("Task", task["name"], ignore_permissions=True)
+	linked_projects = frappe.get_all("Project", filters={"sales_order": sales_order}, pluck="name")
+	for p in linked_projects:
+		if p:
+			projects.add(p)
 
-		project_doc = frappe.get_doc("Project", project)
-		project_doc.sales_order = ""
-		project_doc.save(ignore_permissions=True)
-		frappe.delete_doc("Project", project, ignore_permissions=True)
+	item_projects = frappe.get_all("Sales Order Item", filters={"parent": sales_order}, pluck="project")
+	for p in item_projects:
+		if p:
+			projects.add(p)
 
-	doc = frappe.get_doc("Sales Order", sales_order)
-	doc.flags.ignore_permissions = True
-	doc.cancel()
-	frappe.delete_doc("Sales Order", sales_order, ignore_permissions=True)
+	for project in projects:
+		if frappe.db.exists("Project", project):
+			frappe.db.set_value("Project", project, "sales_order", None)
+			frappe.db.sql("UPDATE `tabSales Order Item` SET project = NULL WHERE project = %s OR parent = %s", (project, sales_order))
+
+			linked_tasks = frappe.get_all("Task", filters={"project": project}, pluck="name")
+			for task_name in linked_tasks:
+				timers = frappe.get_all("Active Task Timer", filters={"task": task_name}, pluck="name", ignore_permissions=True)
+				for timer_name in timers:
+					frappe.delete_doc("Active Task Timer", timer_name, ignore_permissions=True, force=True)
+
+				frappe.delete_doc("Task", task_name, ignore_permissions=True, force=True)
+
+			frappe.delete_doc("Project", project, ignore_permissions=True, force=True)
+
+	if frappe.db.exists("Sales Order", sales_order):
+		frappe.db.set_value("Sales Order", sales_order, "project", None)
+		frappe.db.sql("UPDATE `tabSales Order Item` SET project = NULL WHERE parent = %s", sales_order)
+		doc = frappe.get_doc("Sales Order", sales_order)
+		doc.flags.ignore_permissions = True
+
+		if doc.docstatus == 1:
+			doc.cancel()
+
+		frappe.delete_doc("Sales Order", sales_order, ignore_permissions=True, force=True)
 
 	return "success"
 
