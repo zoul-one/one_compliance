@@ -11,7 +11,7 @@ def calculate_total_lag_hours(doc, method=None):
 	"""
 	total_lag_seconds = 0
 	for row in doc.time_logs:
-		if row.lag_time:
+		if flt(row.lag_time) > 0:
 			total_lag_seconds += flt(row.lag_time)
 	doc.total_lag_hours = total_lag_seconds / 3600.0
 
@@ -24,7 +24,7 @@ def check_lag_and_notify(doc, method=None):
 	lag_rows_to_mail = []
 
 	for row in doc.time_logs:
-		if row.lag_time and not row.lag_notification_sent:
+		if flt(row.lag_time) > 0 and not row.lag_notification_sent:
 			lag_rows_to_notify.append(row)
 
 			# Only check for email flag if task exists
