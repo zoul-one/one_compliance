@@ -525,8 +525,6 @@ def create_sales_orders_from_compliance_agreements(posting_date=today()):
 	Sales Order is created only if the Compliance Sub Category is billable.
 	Project is created in both cases.
 	"""
-	current_date = getdate(posting_date)
-
 	agreements = frappe.db.sql("""
 		SELECT 
 			ca.name, ca.customer, ca.company, ca.valid_from, ca.valid_upto, 
@@ -543,15 +541,34 @@ def create_sales_orders_from_compliance_agreements(posting_date=today()):
 		return
 
 	for agreement in agreements:
-		valid_from = getdate(agreement.valid_from)
-		valid_upto = getdate(agreement.valid_upto) if agreement.valid_upto else None
+		if len(agreements) > 1 and not frappe.flags.in_test and not getattr(frappe.flags, "in_agreement_process", False):
+			frappe.enqueue(
+				"one_compliance.one_compliance.doctype.compliance_agreement.compliance_agreement.process_single_compliance_agreement",
+				agreement=agreement,
+				posting_date=posting_date,
+				queue="long",
+				enqueue_after_commit=True
+			)
+		else:
+			process_single_compliance_agreement(agreement, posting_date)
+
+
+def process_single_compliance_agreement(agreement, posting_date=today()):
+	frappe.flags.in_agreement_process = True
+	current_date = getdate(posting_date)
+	try:
+		valid_from = getdate(agreement.get("valid_from") if isinstance(agreement, dict) else agreement.valid_from)
+		valid_upto = getdate(agreement.get("valid_upto")) if (isinstance(agreement, dict) and agreement.get("valid_upto")) or getattr(agreement, "valid_upto", None) else None
+		agreement_name = agreement.get("name") if isinstance(agreement, dict) else agreement.name
+		agreement_customer = agreement.get("customer") if isinstance(agreement, dict) else agreement.customer
+		agreement_company = agreement.get("company") if isinstance(agreement, dict) else agreement.company
 
 		if current_date < valid_from:
-			continue
+			return
 
 		category_details = frappe.get_all(
 			"Compliance Category Details",
-			filters={"parent": agreement.name},
+			filters={"parent": agreement_name},
 			fields=["name", "compliance_sub_category", "rate", "compliance_date"]
 		)
 
@@ -589,13 +606,13 @@ def create_sales_orders_from_compliance_agreements(posting_date=today()):
 				if current_date >= valid_from:
 					# Check if project already exists for this agreement and subcategory
 					project_exists = frappe.db.exists("Project", {
-						"compliance_agreement": agreement.name,
+						"compliance_agreement": agreement_name,
 						"compliance_sub_category": sub_cat
 					})
 					# Check if sales order item already exists for this agreement and subcategory
 					so_exists = False
 					if is_billable:
-						linked_so_names = frappe.get_all("Sales Order", filters={"compliance_agreement": agreement.name, "docstatus": ["<", 2]}, pluck="name")
+						linked_so_names = frappe.get_all("Sales Order", filters={"compliance_agreement": agreement_name, "docstatus": ["<", 2]}, pluck="name")
 						if linked_so_names and frappe.db.exists("Sales Order Item", {
 							"custom_compliance_subcategory": sub_cat,
 							"parent": ["in", linked_so_names]
@@ -624,7 +641,7 @@ def create_sales_orders_from_compliance_agreements(posting_date=today()):
 			project = None
 			if project_template:
 				project_filters = {
-					"compliance_agreement": agreement.name,
+					"compliance_agreement": agreement_name,
 					"compliance_sub_category": sub_cat,
 				}
 				if allow_repeat:
@@ -634,11 +651,11 @@ def create_sales_orders_from_compliance_agreements(posting_date=today()):
 					project = create_project_from_template(
 						None,
 						project_template,
-						agreement.customer,
-						agreement.company,
+						agreement_customer,
+						agreement_company,
 						sub_cat,
 						detail.name,
-						agreement.name,
+						agreement_name,
 						sub_category.compliance_category,
 						posting_date
 					)
@@ -676,6 +693,16 @@ def create_sales_orders_from_compliance_agreements(posting_date=today()):
 					"next_compliance_date": next_compliance_date
 				}
 			)
+
+		frappe.db.commit()
+	except Exception as e:
+		frappe.db.rollback()
+		frappe.log_error(
+			f"Failed to create sales order / project for Agreement: {agreement.get('name') if isinstance(agreement, dict) else agreement.name}",
+			e
+		)
+	finally:
+		frappe.flags.in_agreement_process = False
 
 def create_project_from_template(sales_order, project_template, customer, company,
 								 compliance_sub_category, compliance_category_details_id,
@@ -792,6 +819,8 @@ def create_project_from_template(sales_order, project_template, customer, compan
 			if template_task.checklist_template:
 				task_doc.checklist_template = template_task.checklist_template
 
+			task_doc.flags.ignore_nsm = True
+			task_doc.flags.from_project = True
 			task_doc.insert(ignore_permissions=True)
 			assigned_users = []
 

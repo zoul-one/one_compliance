@@ -83,6 +83,7 @@ class CustomTask(Task):
 			return ret
 
 	def validate(self):
+		self.validate_active_timer()
 		self.validate_dates()
 		self.validate_progress()
 		self.validate_status()
@@ -342,6 +343,21 @@ class CustomTask(Task):
 						msg=_("Please complete the checklist item <b>`{0}`</b> before marking the task <b>`{1}`</b> as Completed".format(item.checklist_item, self.name))
 					)
 
+	def validate_active_timer(self):
+		if self.status == "Completed":
+			active_timer = frappe.db.get_value(
+				"Active Task Timer",
+				{"task": self.name},
+				["user", "full_name"],
+				as_dict=True,
+			)
+			if active_timer:
+				if active_timer.user == frappe.session.user:
+					frappe.throw(_("This task is currently running. Please stop the timer before marking it as Completed."))
+				else:
+					person = active_timer.full_name or active_timer.user
+					frappe.throw(_("{0} is working on it.").format(person))
+
 @frappe.whitelist()
 def set_tasks_as_overdue():
 	tasks = frappe.get_all(
@@ -374,7 +390,6 @@ def update_expected_dates_in_task(doc):
 		doc.exp_start_date = frappe.utils.today()
 		doc.exp_end_date = add_days(doc.exp_start_date, doc.duration)
 		doc.save()
-	frappe.db.commit()
 
 def add_project_user_if_not_exists(project, user_id):
 	project_doc = frappe.get_doc('Project', project)
@@ -465,7 +480,6 @@ def set_task_time_line(doc):
 	if doc.duration and doc.exp_start_date:
 		exp_end_date = add_days(doc.exp_start_date, doc.duration)
 		doc.db_set('exp_end_date', exp_end_date, update_modified=False)
-		frappe.db.commit()
 
 @frappe.whitelist()
 def make_sales_invoice(doc, method):
