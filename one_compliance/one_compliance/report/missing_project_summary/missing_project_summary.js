@@ -36,5 +36,10 @@ frappe.query_reports["Missing Project Summary"] = {
 			"label": __("Include Expired"),
 			"fieldtype": "Check",
 		},
+		{
+			"fieldname": "include_cancelled",
+			"label": __("Include Cancelled Projects"),
+			"fieldtype": "Check",
+		},
 	],
 };

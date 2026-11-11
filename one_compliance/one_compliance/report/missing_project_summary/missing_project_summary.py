@@ -42,6 +42,19 @@ def get_columns():
 			"fieldtype": "Date",
 			"width": 120,
 		},
+		{
+			"label": "Project",
+			"fieldname": "project",
+			"fieldtype": "Link",
+			"options": "Project",
+			"width": 200,
+		},
+		{
+			"label": "Project Status",
+			"fieldname": "project_status",
+			"fieldtype": "Data",
+			"width": 140,
+		},
 	]
 
 
@@ -141,27 +154,77 @@ def get_missing_projects(filters):
 			expected_dates = filtered_dates
 
 		for compliance_date in expected_dates:
-			project_exists = frappe.db.exists("Project", {
+			active_project = frappe.db.exists("Project", {
 				"compliance_agreement": agreement.compliance_agreement,
 				"compliance_sub_category": agreement.compliance_sub_category,
 				"expected_start_date": compliance_date,
 				"status": ["!=", "Cancelled"],
 			})
-			if not project_exists:
+			if active_project:
+				continue
+
+			cancelled_project = frappe.db.get_value("Project", {
+				"compliance_agreement": agreement.compliance_agreement,
+				"compliance_sub_category": agreement.compliance_sub_category,
+				"expected_start_date": compliance_date,
+				"status": "Cancelled",
+			}, "name")
+
+			if cancelled_project:
+				if filters.get("include_cancelled"):
+					results.append({
+						"customer": agreement.customer,
+						"compliance_agreement": agreement.compliance_agreement,
+						"compliance_sub_category": agreement.compliance_sub_category,
+						"expected_start_date": compliance_date,
+						"project": cancelled_project,
+						"project_status": "Cancelled",
+					})
+			else:
 				results.append({
 					"customer": agreement.customer,
 					"compliance_agreement": agreement.compliance_agreement,
 					"compliance_sub_category": agreement.compliance_sub_category,
 					"expected_start_date": compliance_date,
+					"project": None,
+					"project_status": "Not Created",
 				})
 
 	return results
+
+
+def parse_month(month_val):
+	if not month_val:
+		return None
+	try:
+		if isinstance(month_val, int):
+			m = month_val
+		elif str(month_val).isdigit():
+			m = int(month_val)
+		else:
+			m = list(calendar.month_name).index(str(month_val).strip())
+		return m if 1 <= m <= 12 else None
+	except Exception:
+		return None
+
+
+def parse_day(day_val):
+	if not day_val:
+		return None
+	try:
+		d = int(day_val)
+		return d if 1 <= d <= 31 else None
+	except Exception:
+		return None
 
 
 def get_repeat_dates(start_date, valid_upto, frequency, month=None, day=None, to_date=None):
 	dates = []
 	effective_to = getdate(to_date) if to_date else getdate(today())
 	limit_date = min(effective_to, valid_upto) if valid_upto else effective_to
+
+	month = parse_month(month)
+	day = parse_day(day)
 
 	if frequency == "Yearly" and month and day:
 		year = start_date.year
