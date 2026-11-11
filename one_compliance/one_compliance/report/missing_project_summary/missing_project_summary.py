@@ -52,9 +52,9 @@ def get_missing_projects(filters):
 	}
 
 	if filters.get("include_expired"):
-		conditions = "ca.status NOT IN ('Draft') AND ca.docstatus != 2"
+		conditions = "ca.status IN ('Active', 'Expired') AND ca.docstatus = 1"
 	else:
-		conditions = "ca.status NOT IN ('Expired', 'Draft') AND (ca.valid_upto IS NULL OR ca.valid_upto >= %(today)s) AND ca.docstatus != 2"
+		conditions = "ca.status = 'Active' AND (ca.valid_upto IS NULL OR ca.valid_upto >= %(today)s) AND ca.docstatus = 1"
 
 	if filters.get("customer"):
 		conditions += " AND ca.customer = %(customer)s"
@@ -103,10 +103,7 @@ def get_missing_projects(filters):
 			continue
 
 		valid_from = getdate(agreement.valid_from)
-		if agreement.valid_upto:
-			valid_upto = getdate(agreement.valid_upto)
-		else:
-			valid_upto = getdate(today())
+		valid_upto = getdate(agreement.valid_upto) if agreement.valid_upto else None
 
 		# Determine expected compliance/project-start dates
 		if sub_cat.allow_repeat:
@@ -148,6 +145,7 @@ def get_missing_projects(filters):
 				"compliance_agreement": agreement.compliance_agreement,
 				"compliance_sub_category": agreement.compliance_sub_category,
 				"expected_start_date": compliance_date,
+				"status": ["!=", "Cancelled"],
 			})
 			if not project_exists:
 				results.append({
@@ -162,40 +160,58 @@ def get_missing_projects(filters):
 
 def get_repeat_dates(start_date, valid_upto, frequency, month=None, day=None, to_date=None):
 	dates = []
-	limit_date = min(getdate(to_date or today()), valid_upto)
-	if frequency == "Quarterly" and month and day:
-		quarterly_months = [(month + 3 * i - 1) % 12 + 1 for i in range(4)]
+	effective_to = getdate(to_date) if to_date else getdate(today())
+	limit_date = min(effective_to, valid_upto) if valid_upto else effective_to
+
+	if frequency == "Yearly" and month and day:
+		year = start_date.year
+		while year <= limit_date.year:
+			max_day = calendar.monthrange(year, month)[1]
+			day_to_use = min(day, max_day)
+			candidate = date(year, month, day_to_use)
+			if start_date <= candidate <= limit_date:
+				dates.append(candidate)
+			year += 1
+	elif frequency == "Half Yearly" and month and day:
+		half_yearly_months = sorted([month, (month + 6 - 1) % 12 + 1])
+		year = start_date.year
+		while year <= limit_date.year:
+			for m in half_yearly_months:
+				max_day = calendar.monthrange(year, m)[1]
+				day_to_use = min(day, max_day)
+				candidate = date(year, m, day_to_use)
+				if start_date <= candidate <= limit_date:
+					dates.append(candidate)
+			year += 1
+	elif frequency == "Quarterly" and month and day:
+		quarterly_months = sorted([(month + 3 * i - 1) % 12 + 1 for i in range(4)])
 		year = start_date.year
 		while year <= limit_date.year:
 			for m in quarterly_months:
 				max_day = calendar.monthrange(year, m)[1]
-				day_to_use = day if day <= max_day else max_day
+				day_to_use = min(day, max_day)
 				candidate = date(year, m, day_to_use)
-				if candidate < start_date:
-					continue
-				if candidate > limit_date:
-					return dates
-				dates.append(candidate)
+				if start_date <= candidate <= limit_date:
+					dates.append(candidate)
 			year += 1
-
-	else:
-		current = start_date
+	elif frequency == "Monthly":
+		current = start_date.replace(day=1)
 		while current <= limit_date:
-			candidate_day = day if day else current.day
 			max_day = calendar.monthrange(current.year, current.month)[1]
-			candidate_day = min(candidate_day, max_day)
+			candidate_day = min(day if day else start_date.day, max_day)
 			candidate_date = date(current.year, current.month, candidate_day)
-			if candidate_date < start_date:
-				current = add_months(current, 1 if frequency == "Monthly" else
-											3 if frequency == "Quarterly" else
-											6 if frequency == "Half Yearly" else
-											12)
-				continue
-			if candidate_date > limit_date:
-				break
-			dates.append(candidate_date)
-			current = add_months(current, 1 if frequency == "Monthly" else
-										3 if frequency == "Quarterly" else
-										6 if frequency == "Half Yearly" else
-										12)
-	return dates
+			if start_date <= candidate_date <= limit_date:
+				dates.append(candidate_date)
+			current = add_months(current, 1)
+	else:
+		step = 1 if frequency == "Monthly" else 3 if frequency == "Quarterly" else 6 if frequency == "Half Yearly" else 12
+		current = start_date.replace(day=1)
+		while current <= limit_date:
+			max_day = calendar.monthrange(current.year, current.month)[1]
+			candidate_day = min(day if day else start_date.day, max_day)
+			candidate_date = date(current.year, current.month, candidate_day)
+			if start_date <= candidate_date <= limit_date:
+				dates.append(candidate_date)
+			current = add_months(current, step)
+
+	return sorted(list(set(dates)))
