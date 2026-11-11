@@ -196,6 +196,8 @@ class CustomTask(NestedSet):
 		self.depends_on_tasks = depends_on_tasks
 
 	def update_nsm_model(self):
+		if self.flags.ignore_nsm:
+			return
 		frappe.utils.nestedset.update_nsm(self)
 
 	def on_update(self):
@@ -300,7 +302,8 @@ class CustomTask(NestedSet):
 		if check_if_child_exists(self.name):
 			throw(_("Child Task exists for this Task. You can not delete this Task."))
 
-		self.update_nsm_model()
+		if not self.flags.ignore_nsm:
+			self.update_nsm_model()
 
 	def after_delete(self):
 		self.update_project()

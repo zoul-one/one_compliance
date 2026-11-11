@@ -770,7 +770,6 @@ def create_project_from_template(sales_order, project_template, customer, compan
 			project.expected_end_date = add_days(compliance_date, project_template_doc.custom_project_duration)
 
 		project.insert(ignore_permissions=True)
-		project.save(ignore_permissions=True)
 
 		# Assign ToDo to HOD
 		if sub_category_doc.head_of_department:
