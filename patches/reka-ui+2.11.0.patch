@@ -1,0 +1,262 @@
+diff --git a/node_modules/reka-ui/dist/Combobox/ComboboxInput.cjs b/node_modules/reka-ui/dist/Combobox/ComboboxInput.cjs
+index ccafd92..06d17a7 100644
+--- a/node_modules/reka-ui/dist/Combobox/ComboboxInput.cjs
++++ b/node_modules/reka-ui/dist/Combobox/ComboboxInput.cjs
+@@ -80,11 +80,12 @@ var ComboboxInput_vue_vue_type_script_setup_true_lang_default = /* @__PURE__ */
+ 			const nextFocus = ev.relatedTarget;
+ 			if (!nextFocus) return;
+ 			const isInsideRoot = rootContext.parentElement.value?.contains(nextFocus);
+-			const isInsideContent = document.getElementById(rootContext.contentId)?.contains(nextFocus);
++			const root = rootContext.parentElement.value?.getRootNode?.() ?? document;
++			const isInsideContent = root.getElementById?.(rootContext.contentId)?.contains(nextFocus);
+ 			if (!isInsideRoot && !isInsideContent) requestAnimationFrame(() => {
+ 				if (!rootContext.open.value) return;
+-				const active = document.activeElement;
+-				const isStillOutside = !rootContext.parentElement.value?.contains(active) && !document.getElementById(rootContext.contentId)?.contains(active);
++				const active = root.activeElement ?? document.activeElement;
++				const isStillOutside = !rootContext.parentElement.value?.contains(active) && !root.getElementById?.(rootContext.contentId)?.contains(active);
+ 				if (isStillOutside) rootContext.onOpenChange(false);
+ 			});
+ 		}
+diff --git a/node_modules/reka-ui/dist/Combobox/ComboboxInput.js b/node_modules/reka-ui/dist/Combobox/ComboboxInput.js
+index 9ba8261..8ded174 100644
+--- a/node_modules/reka-ui/dist/Combobox/ComboboxInput.js
++++ b/node_modules/reka-ui/dist/Combobox/ComboboxInput.js
+@@ -79,11 +79,12 @@ var ComboboxInput_vue_vue_type_script_setup_true_lang_default = /* @__PURE__ */
+ 			const nextFocus = ev.relatedTarget;
+ 			if (!nextFocus) return;
+ 			const isInsideRoot = rootContext.parentElement.value?.contains(nextFocus);
+-			const isInsideContent = document.getElementById(rootContext.contentId)?.contains(nextFocus);
++			const root = rootContext.parentElement.value?.getRootNode?.() ?? document;
++			const isInsideContent = root.getElementById?.(rootContext.contentId)?.contains(nextFocus);
+ 			if (!isInsideRoot && !isInsideContent) requestAnimationFrame(() => {
+ 				if (!rootContext.open.value) return;
+-				const active = document.activeElement;
+-				const isStillOutside = !rootContext.parentElement.value?.contains(active) && !document.getElementById(rootContext.contentId)?.contains(active);
++				const active = root.activeElement ?? document.activeElement;
++				const isStillOutside = !rootContext.parentElement.value?.contains(active) && !root.getElementById?.(rootContext.contentId)?.contains(active);
+ 				if (isStillOutside) rootContext.onOpenChange(false);
+ 			});
+ 		}
+diff --git a/node_modules/reka-ui/dist/DismissableLayer/utils.cjs b/node_modules/reka-ui/dist/DismissableLayer/utils.cjs
+index a7f740a..32d5d55 100644
+--- a/node_modules/reka-ui/dist/DismissableLayer/utils.cjs
++++ b/node_modules/reka-ui/dist/DismissableLayer/utils.cjs
+@@ -11,12 +11,35 @@ function isElement(node) {
+ 	const ownerWindow = node.ownerDocument?.defaultView;
+ 	return typeof Element !== "undefined" && node instanceof Element || !!ownerWindow && node instanceof ownerWindow.Element;
+ }
++function layerRoot(element) {
++    return element?.getRootNode?.() ?? globalThis?.document;
++}
++
++function layerRoots(element) {
++    const root = layerRoot(element);
++    const doc = element?.ownerDocument ?? globalThis?.document;
++    return root === doc ? [doc] : [root, doc];
++}
++
++function isRetargeted(element, event) {
++    const root = layerRoot(element);
++    return Boolean(root && root.host && event.target === root.host);
++}
++
++function addLayerListener(roots, type, handler, options) {
++    for (const root of roots) root.addEventListener(type, handler, options);
++}
++
++function removeLayerListener(roots, type, handler) {
++    for (const root of roots) root.removeEventListener(type, handler);
++}
++
+ function isLayerExist(layerElement, targetElement) {
+ 	if (!isElement(targetElement)) return false;
+ 	if (layerElement.contains(targetElement)) return true;
+ 	const targetLayer = targetElement.closest("[data-dismissable-layer]");
+ 	const mainLayer = layerElement.dataset.dismissableLayer === "" ? layerElement : layerElement.querySelector("[data-dismissable-layer]");
+-	const nodeList = Array.from(layerElement.ownerDocument.querySelectorAll("[data-dismissable-layer]"));
++	const nodeList = Array.from(layerRoot(layerElement).querySelectorAll("[data-dismissable-layer]"));
+ 	if (targetLayer && (mainLayer === targetLayer || nodeList.indexOf(mainLayer) < nodeList.indexOf(targetLayer))) return true;
+ 	else return false;
+ }
+@@ -30,12 +53,13 @@ function usePointerDownOutside(onPointerDownOutside, element, enabled = true) {
+ 	const handleClickRef = (0, vue.ref)(() => {});
+ 	(0, vue.watchEffect)((cleanupFn) => {
+ 		if (!__vueuse_shared.isClient || !(0, vue.toValue)(enabled)) return;
+-		const ownerDocument = element?.value?.ownerDocument ?? globalThis.document;
++		const roots = layerRoots(element?.value);
+ 		const handlePointerDown = async (event) => {
+ 			const target = event.target;
+ 			if (!element?.value || !target) return;
++			if (isRetargeted(element.value, event)) return;
+ 			if (isLayerExist(element.value, target)) {
+-				ownerDocument.removeEventListener("click", handleClickRef.value);
++				removeLayerListener(roots, "click", handleClickRef.value);
+ 				isPointerInsideDOMTree.value = false;
+ 				return;
+ 			}
+@@ -57,11 +81,11 @@ function usePointerDownOutside(onPointerDownOutside, element, enabled = true) {
+ 				* certain that it was raised, and therefore cleaned-up.
+ 				*/
+ 				if (event.pointerType === "touch") {
+-					ownerDocument.removeEventListener("click", handleClickRef.value);
++					removeLayerListener(roots, "click", handleClickRef.value);
+ 					handleClickRef.value = handleAndDispatchPointerDownOutsideEvent;
+-					ownerDocument.addEventListener("click", handleClickRef.value, { once: true });
++					addLayerListener(roots, "click", handleClickRef.value, { once: true });
+ 				} else handleAndDispatchPointerDownOutsideEvent();
+-			} else ownerDocument.removeEventListener("click", handleClickRef.value);
++			} else removeLayerListener(roots, "click", handleClickRef.value);
+ 			isPointerInsideDOMTree.value = false;
+ 		};
+ 		/**
+@@ -78,12 +102,12 @@ function usePointerDownOutside(onPointerDownOutside, element, enabled = true) {
+ 		* });
+ 		*/
+ 		const timerId = window.setTimeout(() => {
+-			ownerDocument.addEventListener("pointerdown", handlePointerDown);
++			addLayerListener(roots, "pointerdown", handlePointerDown);
+ 		}, 0);
+ 		cleanupFn(() => {
+ 			window.clearTimeout(timerId);
+-			ownerDocument.removeEventListener("pointerdown", handlePointerDown);
+-			ownerDocument.removeEventListener("click", handleClickRef.value);
++			removeLayerListener(roots, "pointerdown", handlePointerDown);
++			removeLayerListener(roots, "click", handleClickRef.value);
+ 		});
+ 	});
+ 	return { onPointerDownCapture: () => {
+@@ -99,9 +123,10 @@ function useFocusOutside(onFocusOutside, element, enabled = true) {
+ 	const isFocusInsideDOMTree = (0, vue.ref)(false);
+ 	(0, vue.watchEffect)((cleanupFn) => {
+ 		if (!__vueuse_shared.isClient || !(0, vue.toValue)(enabled)) return;
+-		const ownerDocument = element?.value?.ownerDocument ?? globalThis.document;
++		const roots = layerRoots(element?.value);
+ 		const handleFocus = async (event) => {
+ 			if (!element?.value) return;
++			if (isRetargeted(element.value, event)) return;
+ 			await (0, vue.nextTick)();
+ 			await (0, vue.nextTick)();
+ 			const target = event.target;
+@@ -111,8 +136,8 @@ function useFocusOutside(onFocusOutside, element, enabled = true) {
+ 				require_shared_handleAndDispatchCustomEvent.handleAndDispatchCustomEvent(FOCUS_OUTSIDE, onFocusOutside, eventDetail);
+ 			}
+ 		};
+-		ownerDocument.addEventListener("focusin", handleFocus);
+-		cleanupFn(() => ownerDocument.removeEventListener("focusin", handleFocus));
++		addLayerListener(roots, "focusin", handleFocus);
++		cleanupFn(() => removeLayerListener(roots, "focusin", handleFocus));
+ 	});
+ 	return {
+ 		onFocusCapture: () => {
+diff --git a/node_modules/reka-ui/dist/DismissableLayer/utils.js b/node_modules/reka-ui/dist/DismissableLayer/utils.js
+index c20a11f..4a3ef8f 100644
+--- a/node_modules/reka-ui/dist/DismissableLayer/utils.js
++++ b/node_modules/reka-ui/dist/DismissableLayer/utils.js
+@@ -10,12 +10,35 @@ function isElement(node) {
+ 	const ownerWindow = node.ownerDocument?.defaultView;
+ 	return typeof Element !== "undefined" && node instanceof Element || !!ownerWindow && node instanceof ownerWindow.Element;
+ }
++function layerRoot(element) {
++    return element?.getRootNode?.() ?? globalThis?.document;
++}
++
++function layerRoots(element) {
++    const root = layerRoot(element);
++    const doc = element?.ownerDocument ?? globalThis?.document;
++    return root === doc ? [doc] : [root, doc];
++}
++
++function isRetargeted(element, event) {
++    const root = layerRoot(element);
++    return Boolean(root && root.host && event.target === root.host);
++}
++
++function addLayerListener(roots, type, handler, options) {
++    for (const root of roots) root.addEventListener(type, handler, options);
++}
++
++function removeLayerListener(roots, type, handler) {
++    for (const root of roots) root.removeEventListener(type, handler);
++}
++
+ function isLayerExist(layerElement, targetElement) {
+ 	if (!isElement(targetElement)) return false;
+ 	if (layerElement.contains(targetElement)) return true;
+ 	const targetLayer = targetElement.closest("[data-dismissable-layer]");
+ 	const mainLayer = layerElement.dataset.dismissableLayer === "" ? layerElement : layerElement.querySelector("[data-dismissable-layer]");
+-	const nodeList = Array.from(layerElement.ownerDocument.querySelectorAll("[data-dismissable-layer]"));
++	const nodeList = Array.from(layerRoot(layerElement).querySelectorAll("[data-dismissable-layer]"));
+ 	if (targetLayer && (mainLayer === targetLayer || nodeList.indexOf(mainLayer) < nodeList.indexOf(targetLayer))) return true;
+ 	else return false;
+ }
+@@ -29,12 +52,13 @@ function usePointerDownOutside(onPointerDownOutside, element, enabled = true) {
+ 	const handleClickRef = ref(() => {});
+ 	watchEffect((cleanupFn) => {
+ 		if (!isClient || !toValue(enabled)) return;
+-		const ownerDocument = element?.value?.ownerDocument ?? globalThis.document;
++		const roots = layerRoots(element?.value);
+ 		const handlePointerDown = async (event) => {
+ 			const target = event.target;
+ 			if (!element?.value || !target) return;
++			if (isRetargeted(element.value, event)) return;
+ 			if (isLayerExist(element.value, target)) {
+-				ownerDocument.removeEventListener("click", handleClickRef.value);
++				removeLayerListener(roots, "click", handleClickRef.value);
+ 				isPointerInsideDOMTree.value = false;
+ 				return;
+ 			}
+@@ -56,11 +80,11 @@ function usePointerDownOutside(onPointerDownOutside, element, enabled = true) {
+ 				* certain that it was raised, and therefore cleaned-up.
+ 				*/
+ 				if (event.pointerType === "touch") {
+-					ownerDocument.removeEventListener("click", handleClickRef.value);
++					removeLayerListener(roots, "click", handleClickRef.value);
+ 					handleClickRef.value = handleAndDispatchPointerDownOutsideEvent;
+-					ownerDocument.addEventListener("click", handleClickRef.value, { once: true });
++					addLayerListener(roots, "click", handleClickRef.value, { once: true });
+ 				} else handleAndDispatchPointerDownOutsideEvent();
+-			} else ownerDocument.removeEventListener("click", handleClickRef.value);
++			} else removeLayerListener(roots, "click", handleClickRef.value);
+ 			isPointerInsideDOMTree.value = false;
+ 		};
+ 		/**
+@@ -77,12 +101,12 @@ function usePointerDownOutside(onPointerDownOutside, element, enabled = true) {
+ 		* });
+ 		*/
+ 		const timerId = window.setTimeout(() => {
+-			ownerDocument.addEventListener("pointerdown", handlePointerDown);
++			addLayerListener(roots, "pointerdown", handlePointerDown);
+ 		}, 0);
+ 		cleanupFn(() => {
+ 			window.clearTimeout(timerId);
+-			ownerDocument.removeEventListener("pointerdown", handlePointerDown);
+-			ownerDocument.removeEventListener("click", handleClickRef.value);
++			removeLayerListener(roots, "pointerdown", handlePointerDown);
++			removeLayerListener(roots, "click", handleClickRef.value);
+ 		});
+ 	});
+ 	return { onPointerDownCapture: () => {
+@@ -98,9 +122,10 @@ function useFocusOutside(onFocusOutside, element, enabled = true) {
+ 	const isFocusInsideDOMTree = ref(false);
+ 	watchEffect((cleanupFn) => {
+ 		if (!isClient || !toValue(enabled)) return;
+-		const ownerDocument = element?.value?.ownerDocument ?? globalThis.document;
++		const roots = layerRoots(element?.value);
+ 		const handleFocus = async (event) => {
+ 			if (!element?.value) return;
++			if (isRetargeted(element.value, event)) return;
+ 			await nextTick();
+ 			await nextTick();
+ 			const target = event.target;
+@@ -110,8 +135,8 @@ function useFocusOutside(onFocusOutside, element, enabled = true) {
+ 				handleAndDispatchCustomEvent(FOCUS_OUTSIDE, onFocusOutside, eventDetail);
+ 			}
+ 		};
+-		ownerDocument.addEventListener("focusin", handleFocus);
+-		cleanupFn(() => ownerDocument.removeEventListener("focusin", handleFocus));
++		addLayerListener(roots, "focusin", handleFocus);
++		cleanupFn(() => removeLayerListener(roots, "focusin", handleFocus));
+ 	});
+ 	return {
+ 		onFocusCapture: () => {

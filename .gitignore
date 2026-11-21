@@ -4,4 +4,10 @@
 *.swp
 tags
 one_compliance/docs/current
+
+# Node dependencies
 node_modules/
+**/node_modules
+
+# Generated island assets
+one_compliance/public/dist/

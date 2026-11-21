@@ -84,6 +84,10 @@ before_uninstall = "one_compliance.install.before_uninstall"
 
 after_migrate = "one_compliance.setup.after_migrate"
 
+extend_bootinfo = [
+    "one_compliance.one_compliance.island.extend_bootinfo",
+]
+
 # Uninstallation
 # ------------
 
