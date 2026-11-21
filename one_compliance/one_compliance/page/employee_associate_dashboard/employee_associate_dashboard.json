@@ -1,0 +1,10 @@
+{
+    "doctype": "Page",
+    "name": "employee-associate-dashboard",
+    "page_name": "employee-associate-dashboard",
+    "module": "One Compliance",
+    "title": "Employee Associate Dashboard",
+    "standard": "Yes",
+    "roles": [],
+    "system_page": 0
+}

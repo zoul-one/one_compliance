@@ -191,7 +191,7 @@ def get_permission_query_conditions(user=None):
 
 	if "Manager" in user_roles or "Executive" in user_roles:
 		if frappe.db.has_column("Project", "_assign"):
-			return "(`tabProject`.`_assign` LIKE '%{}%')".format(user)
+			return "(`tabProject`.`_assign` LIKE '%%{}%%')".format(user)
 		else:
 			return "1=0"
 	else:
