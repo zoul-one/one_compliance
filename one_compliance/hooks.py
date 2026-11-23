@@ -7,7 +7,18 @@ app_description = "Frappe app to facilitate operations in Compliances and Tasks"
 app_email = "sales@zoul.one"
 app_license = "MIT"
 required_apps = ["frappe/erpnext", "frappe/hrms"]
+# Desk Apps Screen
+# ----------------
 
+add_to_apps_screen = [
+    {
+        "name": app_name,
+        "logo": "/assets/one_compliance/images/one-compliance-logo.svg",
+        "title": "Employee Associate Dashboard",
+        "route": "/app/employee-associate-dashboard",
+        "sequence_id": 40,
+    }
+]
 # Includes in <head>
 # ------------------
 
