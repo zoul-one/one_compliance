@@ -1,0 +1,3335 @@
+From 94083e89baac1014bf0287324393b0d112235f09 Mon Sep 17 00:00:00 2001
+From: adhamsaheer15 <adhamsaheer15@gmail.com>
+Date: Mon, 23 Nov 2026 12:36:41 +0530
+Subject: [PATCH] fix:Frappe UI Island support fix
+
+---
+ esbuild/assets_json.js                        |  61 +++
+ esbuild/esbuild.js                            |  16 +-
+ frappe/public/js/frappe/ui/island/loader.js   | 129 +++++
+ frappe/public/js/frappe/views/pageview.js     |   1 +
+ frappe/utils/island.py                        |  86 ++++
+ ui/island/Island.vue                          | 140 ++++++
+ ui/island/context.js                          |  43 ++
+ .../0001-an-app-bundles-its-own-island.md     |  33 ++
+ ...0002-an-app-builds-its-islands-together.md |  27 ++
+ ...ilwind-scans-the-module-list-not-a-glob.md |  27 ++
+ ...0004-an-app-ships-one-island-stylesheet.md |  25 +
+ ...reset-resolves-its-tooling-from-the-app.md |  31 ++
+ ...the-mount-contract-lives-with-frappe-ui.md |  25 +
+ ...a-ui-is-patched-to-read-the-shadow-root.md |  33 ++
+ .../decisions/0008-one-host-loop-two-hosts.md |  29 ++
+ .../0009-an-island-takes-vues-props-object.md |  29 ++
+ ...a-page-island-reports-title-and-actions.md |  44 ++
+ ...-claims-a-desk-document-with-doc-events.md |  29 ++
+ .../0012-a-desk-page-can-be-an-island.md      |  35 ++
+ .../0013-framework-builds-page-islands.md     |  41 ++
+ ...0014-assets-json-is-the-island-registry.md |  33 ++
+ .../0015-framework-builds-its-own-islands.md  |  25 +
+ .../0016-desk-charts-are-frappe-ui-charts.md  |  39 ++
+ ui/island/decisions/README.md                 |   7 +
+ ui/island/host.js                             | 246 ++++++++++
+ ui/island/index.js                            |   8 +
+ ui/island/mount.js                            | 233 +++++++++
+ ui/island/theme.js                            |  36 ++
+ ui/package.json                               |  11 +
+ ui/patches/reka-ui+2.10.1.patch               | 306 ++++++++++++
+ ui/vite/island/assets.js                      | 204 ++++++++
+ ui/vite/island/desk-fonts.js                  |  24 +
+ ui/vite/island/index.js                       | 445 ++++++++++++++++++
+ ui/vite/island/inputs.js                      | 204 ++++++++
+ ui/vite/island/root-to-host.js                |  18 +
+ ui/vite/island/tailwind-scan.js               |  75 +++
+ ui/vite/island/tailwind.js                    |  67 +++
+ ui/vite/island/tools.js                       |  95 ++++
+ ui/vite/island/vue.js                         |  23 +
+ 39 files changed, 2978 insertions(+), 5 deletions(-)
+ create mode 100644 esbuild/assets_json.js
+ create mode 100644 frappe/public/js/frappe/ui/island/loader.js
+ create mode 100644 frappe/utils/island.py
+ create mode 100644 ui/island/Island.vue
+ create mode 100644 ui/island/context.js
+ create mode 100644 ui/island/decisions/0001-an-app-bundles-its-own-island.md
+ create mode 100644 ui/island/decisions/0002-an-app-builds-its-islands-together.md
+ create mode 100644 ui/island/decisions/0003-tailwind-scans-the-module-list-not-a-glob.md
+ create mode 100644 ui/island/decisions/0004-an-app-ships-one-island-stylesheet.md
+ create mode 100644 ui/island/decisions/0005-the-preset-resolves-its-tooling-from-the-app.md
+ create mode 100644 ui/island/decisions/0006-the-mount-contract-lives-with-frappe-ui.md
+ create mode 100644 ui/island/decisions/0007-reka-ui-is-patched-to-read-the-shadow-root.md
+ create mode 100644 ui/island/decisions/0008-one-host-loop-two-hosts.md
+ create mode 100644 ui/island/decisions/0009-an-island-takes-vues-props-object.md
+ create mode 100644 ui/island/decisions/0010-a-page-island-reports-title-and-actions.md
+ create mode 100644 ui/island/decisions/0011-an-app-claims-a-desk-document-with-doc-events.md
+ create mode 100644 ui/island/decisions/0012-a-desk-page-can-be-an-island.md
+ create mode 100644 ui/island/decisions/0013-framework-builds-page-islands.md
+ create mode 100644 ui/island/decisions/0014-assets-json-is-the-island-registry.md
+ create mode 100644 ui/island/decisions/0015-framework-builds-its-own-islands.md
+ create mode 100644 ui/island/decisions/0016-desk-charts-are-frappe-ui-charts.md
+ create mode 100644 ui/island/decisions/README.md
+ create mode 100644 ui/island/host.js
+ create mode 100644 ui/island/index.js
+ create mode 100644 ui/island/mount.js
+ create mode 100644 ui/island/theme.js
+ create mode 100644 ui/patches/reka-ui+2.10.1.patch
+ create mode 100644 ui/vite/island/assets.js
+ create mode 100644 ui/vite/island/desk-fonts.js
+ create mode 100644 ui/vite/island/index.js
+ create mode 100644 ui/vite/island/inputs.js
+ create mode 100644 ui/vite/island/root-to-host.js
+ create mode 100644 ui/vite/island/tailwind-scan.js
+ create mode 100644 ui/vite/island/tailwind.js
+ create mode 100644 ui/vite/island/tools.js
+ create mode 100644 ui/vite/island/vue.js
+
+diff --git a/esbuild/assets_json.js b/esbuild/assets_json.js
+new file mode 100644
+index 0000000000..f0d167fb6b
+--- /dev/null
++++ b/esbuild/assets_json.js
+@@ -0,0 +1,61 @@
++const fs = require("fs");
++
++// a writer that died holding the lock frees it after this long
++const STALE_LOCK_MS = 10000;
++const RETRY_MS = 20;
++
++/**
++ * Read, change and write an assets.json under a lock.
++ *
++ * The esbuild watcher and each island watcher rewrite one assets.json, and a
++ * write that lands between another's read and write drops that writer's keys.
++ * `update` takes the parsed file and returns the whole new object.
++ *
++ * @returns {Promise<{ previous: Object, next: Object }>}
++ */
++async function update_assets_json(assets_json_path, update) {
++	const lock = assets_json_path + ".lock";
++	await acquire(lock);
++	try {
++		const previous = read(assets_json_path);
++		const next = update(previous);
++		fs.writeFileSync(assets_json_path, JSON.stringify(next, null, 4));
++		return { previous, next };
++	} finally {
++		fs.rmSync(lock, { recursive: true, force: true });
++	}
++}
++
++async function acquire(lock) {
++	for (;;) {
++		try {
++			fs.mkdirSync(lock);
++			return;
++		} catch (error) {
++			if (error.code !== "EEXIST") throw error;
++		}
++		if (is_stale(lock)) fs.rmSync(lock, { recursive: true, force: true });
++		await new Promise((resolve) => setTimeout(resolve, RETRY_MS));
++	}
++}
++
++function is_stale(lock) {
++	try {
++		return Date.now() - fs.statSync(lock).mtimeMs > STALE_LOCK_MS;
++	} catch {
++		return false;
++	}
++}
++
++function read(assets_json_path) {
++	let contents;
++	try {
++		contents = fs.readFileSync(assets_json_path, "utf-8");
++	} catch (error) {
++		if (error.code === "ENOENT") return {};
++		throw error;
++	}
++	return JSON.parse(contents);
++}
++
++module.exports = { update_assets_json };
+diff --git a/esbuild/esbuild.js b/esbuild/esbuild.js
+index 1ceafe6ac9..03098fc09d 100644
+--- a/esbuild/esbuild.js
++++ b/esbuild/esbuild.js
+@@ -13,7 +13,7 @@ const postCssPlugin = require("@frappe/esbuild-plugin-postcss2").default;
+ const ignore_assets = require("./ignore-assets");
+ const sass_options = require("./sass_options");
+ const build_cleanup_plugin = require("./build-cleanup");
+-
++const { update_assets_json } = require("./assets_json");
+ const {
+ 	app_list,
+ 	assets_path,
+@@ -456,12 +456,18 @@ async function write_assets_json(metafile) {
+ 		}
+ 	}
+ 
+-	let { obj: assets_json, path: assets_json_path } = await get_assets_json_path_and_obj(rtl);
+-	// update with new values
+-	let new_assets_json = Object.assign({}, assets_json, out);
++	let { path: assets_json_path } = await get_assets_json_path_and_obj(rtl);
++
++        let { next: new_assets_json } = await update_assets_json(
++            assets_json_path,
++            (assets_json) => ({
++                ...assets_json,
++                ...out,
++            })
++        );
++
+ 	curr_assets_json = new_assets_json;
+ 
+-	await fs.promises.writeFile(assets_json_path, JSON.stringify(new_assets_json, null, 4));
+ 	await update_assets_json_in_cache();
+ 	if (argv["save-metafiles"]) {
+ 		// use current timestamp in readable formate as a suffix for filename
+diff --git a/frappe/public/js/frappe/ui/island/loader.js b/frappe/public/js/frappe/ui/island/loader.js
+new file mode 100644
+index 0000000000..b351dbe4d8
+--- /dev/null
++++ b/frappe/public/js/frappe/ui/island/loader.js
+@@ -0,0 +1,129 @@
++/**
++ * frappe.ui.mount_island: the desk loader, the one call desk makes to put an
++ * app's island on a page.
++ *
++ *     const island = frappe.ui.mount_island("insights.dashboard", el, {
++ *         dashboard: "sales",
++ *         onTitle: (title) => frappe.utils.set_title(title || __("Dashboard")),
++ *     });
++ *     island.update({ filters });
++ *     island.unmount();
++ *
++ * The host loop in `@framework/ui/island/host` defines the props object, the
++ * handle and `ready`. This file is desk's half. It resolves a name against
++ * boot, assembles the desk context, and publishes the `frappe.ui` API.
++ *
++ * Resolution runs from the name to the registry in boot, then to assets.json,
++ * then to the module URL the host loop imports. An island is a self-contained
++ * ES module, so this file is part of desk's normal esbuild bundle, and the page
++ * needs nothing loaded ahead of the island.
++ *
++ * The caller passes the island's props. Desk adds `host` and `styles`. What the
++ * island does with them is the app's own build. See
++ * ui/island/decisions/0001-an-app-bundles-its-own-island.md.
++ */
++
++import {
++	mountIsland,
++	preloadIsland,
++	reloadChangedIslands,
++	unmountIsland,
++} from "@framework/ui/island/host";
++
++const ISLAND_JS_SUFFIX = ".island.js";
++const ISLAND_CSS_SUFFIX = ".island.css";
++
++/**
++ * @param {string} name        Island name, as the app's build registered it.
++ * @param {HTMLElement|JQuery} el
++ * @param {Object} [props]     Vue's props object: data and `on*` listeners.
++ * @returns {{ update: (props: Object) => void, unmount: () => void, ready: Promise }}
++ */
++function mount_island(name, el, props = {}) {
++	return mountIsland(name, el, {
++		resolve: resolve_island,
++		host: build_desk_context(),
++		props,
++	});
++}
++
++/** Starts downloading an island this site has, so a mount soon after finds it loaded. */
++export function preload_island(name) {
++	if (
++		frappe.boot?.ui_islands?.includes(name) &&
++		frappe.boot.assets_json?.[name + ISLAND_JS_SUFFIX]
++	) {
++		preloadIsland(resolve_island(name));
++	}
++}
++
++function resolve_island(name) {
++	const assets_json = frappe.boot?.assets_json || {};
++	// assets.json is bench-wide. The registry is the part of it this site has.
++	const js = frappe.boot?.ui_islands?.includes(name) && assets_json[name + ISLAND_JS_SUFFIX];
++	if (!js) {
++		throw new Error(
++			__('Island "{0}" is not on this site. Build the app that ships it.', [name])
++		);
++	}
++
++	return { js, css: assets_json[name + ISLAND_CSS_SUFFIX] || null };
++}
++
++/**
++ * The ambient context every island receives. The caller never assembles it, so an
++ * island honors desk's language and timezone with no per-island wiring. The mount
++ * contract adds `theme`, where it can be a tracked read.
++ *
++ * Everything here is data or a desk call. Nothing in it is a Vue value, because
++ * desk's bundle and the island run on separate copies of Vue.
++ */
++function build_desk_context() {
++	const boot = frappe.boot || {};
++	const context = {
++		locale: boot.lang || "en",
++		timezone: boot.time_zone?.user || boot.time_zone?.system || null,
++		user: frappe.session?.user || boot.user?.name || null,
++		base_url: frappe.urllib ? frappe.urllib.get_base_url() : window.location.origin,
++
++		// Desk routing, which an island cannot do for itself. The browser
++		// retargets a click inside a shadow root to the island's host element.
++		// Desk's anchor delegation then never matches, and a plain link reloads
++		// the page.
++		navigate: (route) => frappe.set_route(route),
++
++		// A value as desk prints a field of its type, as text. `doc` is what a fieldtype's
++		// `options` read, such as the field a Currency names for its currency.
++		format: (value, df, doc) =>
++			frappe.utils.html2text(frappe.format(value, df, { inline: true }, doc)),
++		format_axis_number,
++		developer_mode: Boolean(boot.developer_mode),
++		first_day_of_the_week: frappe.sys_defaults?.first_day_of_the_week || null,
++	};
++
++	return context;
++}
++
++/** An axis tick, shortened. A Currency axis keeps its symbol: "₹ 40 K". */
++function format_axis_number(value, df, doc) {
++	const shortened = frappe.utils.format_chart_axis_number(value);
++	if (df?.fieldtype !== "Currency") return shortened;
++
++	// as the number card prints a shortened amount
++	const [digits, unit] = shortened.split(" ");
++	const number = parseFloat(digits);
++	const decimals = frappe.utils.get_number_of_decimals(number);
++	const currency = frappe.meta.get_field_currency(df, doc);
++	return format_currency(number, currency, decimals) + (unit ? " " + unit : "");
++}
++
++frappe.provide("frappe.ui");
++frappe.ui.mount_island = mount_island;
++frappe.ui.unmount_island = unmountIsland;
++
++if (frappe.boot?.developer_mode) {
++	frappe.hot_update = frappe.hot_update || [];
++	// A rebuild moves the asset hash, so the islands on the page point at a stale
++	// module. Only the islands whose URL moved re-mount.
++	frappe.hot_update.push(() => reloadChangedIslands());
++}
+diff --git a/frappe/public/js/frappe/views/pageview.js b/frappe/public/js/frappe/views/pageview.js
+index 406ec6907c..32d70ec462 100644
+--- a/frappe/public/js/frappe/views/pageview.js
++++ b/frappe/public/js/frappe/views/pageview.js
+@@ -1,5 +1,6 @@
+ // Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
+ // MIT License. See license.txt
++import "../ui/island/loader.js";
+ 
+ frappe.provide("frappe.views.pageview");
+ frappe.provide("frappe.standard_pages");
+diff --git a/frappe/utils/island.py b/frappe/utils/island.py
+new file mode 100644
+index 0000000000..7ceb9fecdb
+--- /dev/null
++++ b/frappe/utils/island.py
+@@ -0,0 +1,86 @@
++# Copyright (c) 2026, Frappe Technologies Pvt. Ltd. and Contributors
++# License: MIT. See LICENSE
++"""Desk islands: the registry that says which islands a site has.
++
++An island is registered by being built. Its name is the asset key its build
++writes into assets.json, without the `.island.js` suffix:
++
++    insights.dashboard.island.js  ->  insights.dashboard
++
++assets.json is bench-wide, so the registry keeps only the islands of the apps
++installed on the site. An island's app is the one its URL is served from,
++`/assets/<app>/dist/...`, except for a page island, which framework builds into
++its own dist and which carries its app in its name, `<app>.page.<page name>`.
++
++Two hosts resolve a name against the registry. The desk loader,
++`frappe.ui.mount_island`, reads it from boot on the client. A page without desk
++boot calls `get_island_assets`, which does the same lookup on the server.
++
++The `.island.js` and `.island.css` key forms differ from the legacy `.bundle.js`
++one, so the module loader and the classic loader never claim the same asset.
++"""
++
++import re
++
++import frappe
++from frappe import _
++from frappe.utils import get_assets_json
++
++ISLAND_JS_SUFFIX = ".island.js"
++ISLAND_CSS_SUFFIX = ".island.css"
++
++# Sits between the app and the page name, so a page island and an island an app
++# builds itself can never claim the same name.
++PAGE_ISLAND_INFIX = "page"
++
++ASSET_APP = re.compile(r"^/assets/([^/]+)/")
++
++
++def page_island_name(app: str, page: str) -> str:
++	"""The one name a page island is known by, on both sides of the build."""
++	return f"{app}.{PAGE_ISLAND_INFIX}.{page}"
++
++
++def get_ui_islands() -> list[str]:
++	"""Every island on this site, by name."""
++	installed = set(frappe.get_installed_apps())
++
++	return sorted(
++		name
++		for key, url in get_assets_json().items()
++		if (name := island_name(key)) and island_app(name, url) in installed
++	)
++
++
++def island_name(asset_key: str) -> str | None:
++	"""The island an asset key registers, or `None` for any other key."""
++	if asset_key.endswith(ISLAND_JS_SUFFIX):
++		return asset_key.removesuffix(ISLAND_JS_SUFFIX)
++
++
++def island_app(name: str, url: str) -> str | None:
++	"""The app an island belongs to, which is what decides it is on this site.
++
++	Framework builds every page island, into framework's own dist, so a page
++	island's URL names framework and its name names the app whose page it draws.
++	"""
++	app, infix, _page = name.partition(f".{PAGE_ISLAND_INFIX}.")
++	if infix:
++		return app
++
++	if match := ASSET_APP.match(url):
++		return match.group(1)
++
++
++@frappe.whitelist()
++def get_island_assets(name: str) -> dict:
++	"""Island name -> `{"js": url, "css": url or None}`.
++
++	For a host page that has no desk boot to resolve the name against.
++	"""
++	assets_json = get_assets_json()
++	js = assets_json.get(name + ISLAND_JS_SUFFIX) if name in get_ui_islands() else None
++	if not js:
++		frappe.throw(_('Island "{0}" is not on this site. Build the app that ships it.').format(name))
++
++	return {"js": js, "css": assets_json.get(name + ISLAND_CSS_SUFFIX) or None}
+diff --git a/ui/island/Island.vue b/ui/island/Island.vue
+new file mode 100644
+index 0000000000..fcc0235fe7
+--- /dev/null
++++ b/ui/island/Island.vue
+@@ -0,0 +1,140 @@
++<!--
++	`<Island>`: the Vue host, an island inside a frappe-ui app.
++
++		<Island
++			name="insights.dashboard"
++			:dashboard="dashboard"
++			:context="{ user, locale, navigate }"
++			@title="title = $event"
++			@actions="actions = $event"
++			@navigate="router.push($event)"
++		/>
++
++	The component is transparent. Everything but `name` and `context` is the
++	island's props object, passed to its component verbatim. `class` and `style`
++	stay here, on the host element.
++
++	The desk loader, `frappe.ui.mount_island`, is the other host. Both wrap the
++	host loop in `./host.js`. This component adds the Vue lifecycle, and it
++	resolves a name over the API instead of from `frappe.boot`.
++
++	It imports nothing but Vue, and not frappe-ui, because an app can pin a
++	frappe-ui older than this package's peer range and still host an island.
++-->
++
++<template>
++	<!-- The island fills what it is given. `mountVueIsland` chains `height: 100%`
++	     from here down, and the chain breaks at the first auto height. The static
++	     style comes first, so a style the parent passes wins over it. -->
++	<div ref="root" style="height: 100%" :class="attrs.class" :style="attrs.style"></div>
++</template>
++
++<script>
++export default {
++	// Everything the parent passes is the island's, not the host element's, so
++	// nothing falls through by itself. `class` and `style` are bound above.
++	inheritAttrs: false,
++};
++</script>
++
++<script setup>
++import { computed, onBeforeUnmount, onMounted, ref, useAttrs, watch } from "vue";
++
++import { mountIsland } from "./host.js";
++
++const props = defineProps({
++	name: { type: String, required: true },
++	/** The host context the island reads through `useHost()`. All fields optional. */
++	context: { type: Object, default: () => ({}) },
++});
++
++// `@error` is this component's own event. Vue keeps a declared emit out of
++// `attrs`, so `onError` never reaches the island.
++const emit = defineEmits(["error"]);
++
++const attrs = useAttrs();
++const root = ref(null);
++
++let handle = null;
++
++/**
++ * The island's props object, which is every attribute but the two the host
++ * element keeps. An island reports through plain events, so a host binds a
++ * listener and passes no value down. Nothing has to be filtered out here.
++ */
++const islandProps = computed(() =>
++	Object.fromEntries(Object.entries(attrs).filter(([key]) => key !== "class" && key !== "style"))
++);
++
++onMounted(load);
++onBeforeUnmount(teardown);
++
++watch(() => props.name, load);
++
++// `useAttrs()` returns a proxy that refreshes on each render of the parent, so
++// the object above is a new one every time whether or not anything changed.
++// Compare per key, or every parent render would push a redundant update through
++// the shadow boundary.
++watch(islandProps, (next, previous) => {
++	if (!sameProps(next, previous)) handle?.update(next);
++});
++
++function load() {
++	// The handle is the component's from here on, loaded or not. `update`
++	// reaches a pending mount, and `unmount` cancels it.
++	handle?.unmount();
++	handle = mountIsland(props.name, root.value, {
++		resolve: resolveAssets,
++		host: props.context,
++		props: islandProps.value,
++	});
++
++	// A load this component moved on from reports nothing. The loop resolves a
++	// cancelled load instead of failing it.
++	handle.ready.catch((e) => emit("error", e instanceof Error ? e : new Error(String(e))));
++}
++
++function teardown() {
++	handle?.unmount();
++	handle = null;
++}
++
++function sameProps(a, b) {
++	const keys = Object.keys(a);
++	if (keys.length !== Object.keys(b).length) return false;
++	return keys.every((key) => a[key] === b[key]);
++}
++
++/**
++ * A plain fetch, not frappe-ui's resource layer, so this file keeps its only
++ * import on vue.
++ */
++async function resolveAssets(name) {
++	const url = `/api/method/frappe.utils.island.get_island_assets?name=${encodeURIComponent(
++		name
++	)}`;
++	const response = await fetch(url, { credentials: "same-origin" });
++	const body = await response.json().catch(() => ({}));
++	if (!response.ok) {
++		throw new Error(
++			serverMessage(body) || `island: cannot resolve "${name}" (${response.status})`
++		);
++	}
++	return body.message;
++}
++
++/**
++ * The message `frappe.throw` sent. It is in `_server_messages`, a JSON list of
++ * JSON strings, and not in the response status.
++ */
++function serverMessage(body) {
++	try {
++		return JSON.parse(body._server_messages)
++			.map((entry) => JSON.parse(entry).message)
++			.filter(Boolean)
++			.join(" ");
++	} catch (e) {
++		return body.exception || null;
++	}
++}
++</script>
+diff --git a/ui/island/context.js b/ui/island/context.js
+new file mode 100644
+index 0000000000..668bc7ea4b
+--- /dev/null
++++ b/ui/island/context.js
+@@ -0,0 +1,43 @@
++// The ambient context a host injects into every island: what the page knows or
++// can do that the island's shadow root cannot reach for itself.
++//
++// The key lives here, next to its reader. `mountVueIsland` provides under it.
++
++import { inject } from "vue";
++
++/**
++ * @typedef {Object} IslandHost
++ * @property {string} [locale]
++ * @property {string|null} [timezone]
++ * @property {string|null} [user]
++ * @property {string} [base_url]
++ * @property {(route: string) => void} [navigate]  route the host to one of its
++ *           own pages
++ * @property {string} [theme]  the host's live theme, added by `mountVueIsland`
++ * @property {(value: any, df: Object, doc?: Object) => string} [format]  a value
++ *           as the host prints a field of `df`'s type, as text
++ * @property {(value: number, df?: Object, doc?: Object) => string} [format_axis_number]
++ *           an axis tick, shortened, in `df`'s unit
++ * @property {boolean} [developer_mode]
++ * @property {string|null} [first_day_of_the_week]  as System Settings names the
++ *           day, such as "Monday"
++ */
++
++/**
++ * Injection key for the host context. `Symbol.for`, so an island that carries
++ * its own copy of this module still reads what the host provided.
++ */
++export const hostKey = Symbol.for("frappe:island-host");
++
++/**
++ * The host's context, inside an island component.
++ *
++ * An empty context is a working context. Every field is optional, so a component
++ * still renders where nothing is provided, such as in a unit test or under a
++ * host that predates the field it wants.
++ *
++ * @returns {IslandHost}
++ */
++export function useHost() {
++	return inject(hostKey, {});
++}
+diff --git a/ui/island/decisions/0001-an-app-bundles-its-own-island.md b/ui/island/decisions/0001-an-app-bundles-its-own-island.md
+new file mode 100644
+index 0000000000..0f33934cbd
+--- /dev/null
++++ b/ui/island/decisions/0001-an-app-bundles-its-own-island.md
+@@ -0,0 +1,33 @@
++# An app bundles its own island
++
++An island is one ES module. It carries its own Vue, its own frappe-ui and every other package it imports. The host resolves the module's URL and imports it. The page publishes nothing for the island to link against, so the page needs nothing loaded before the island.
++
++## Decision
++
++Ownership follows the code. The app writes the island, so the app builds it, weighs it and ships it. Framework owns one seam: a name, a URL and the `mount(el, context)` export.
++
++The seam is small enough to state in full. The host reads `<name>.island.js` and `<name>.island.css` from assets.json. It imports the module and calls `mount` with the host context and the stylesheet URL. Nothing else crosses.
++
++Amended by [0014](0014-assets-json-is-the-island-registry.md). The host read the island's bundle name from a `ui_islands` hook first; the asset key is the name now.
++
++The cost is duplication. Two islands from two apps on one page carry two copies of Vue. Each copy is a few hundred kB. Each copy is correct on its own, because two Vue apps in two shadow roots share no state.
++
++## Rejected: a shared runtime the page publishes through an import map
++
++Framework builds one copy of Vue, frappe-ui and everything under them. It writes an import map into the desk page. The app's build leaves those specifiers bare, and the page holds one copy of each.
++
++This removes the duplication and costs three things.
++
++**An ordering dependency between repos.** No app can build until framework builds. Every island on the site waits for a rebuild after each framework release.
++
++**A registration that decides what an island bundles.** The map shares a specifier it carries. The build bundles a specifier the map misses, with everything behind it, and reports nothing. One registration missed `frappe-ui/charts`, and the island bundled 762 kB of echarts. Only the size budget objected.
++
++**Framework depends on frappe-ui.** To build the runtime, framework resolves frappe-ui's entry points, walks its import graph, reconciles versions across the tree, and holds a patch for a package it never imports. Desk uses none of it.
++
++An island that asks the page for Vue is an island the page can break. An island that bundles its own Vue breaks only on its own build.
++
++## Rejected: desk exposes Vue as a global
++
++`window.Vue`, the way desk exposes jQuery. It shares one copy without an import map and without a build step in framework.
++
++It shares exactly one package. frappe-ui is 90% of an island's weight, and it cannot travel this way. Its components are source that the app's Tailwind compiles. So the island still bundles nearly everything, and desk gains a global it must keep forever.
+diff --git a/ui/island/decisions/0002-an-app-builds-its-islands-together.md b/ui/island/decisions/0002-an-app-builds-its-islands-together.md
+new file mode 100644
+index 0000000000..9ebf3a1840
+--- /dev/null
++++ b/ui/island/decisions/0002-an-app-builds-its-islands-together.md
+@@ -0,0 +1,27 @@
++# An app builds its islands together
++
++One Vite build takes all of an app's islands as its entries. Rollup lifts what two entries share into a chunk both import. It writes each entry as `<name>.island.<hash>.js` beside a `chunks/` directory.
++
++## Decision
++
++`buildIslands` takes the whole entry list and runs one build.
++
++An island bundles its own Vue and its own frappe-ui ([0001](0001-an-app-bundles-its-own-island.md)). Within one app that cost is paid once. Two islands built together share one chunk for Vue, one for frappe-ui and one for every helper they both import. The app's second island costs only what it alone adds.
++
++The browser loads an entry and the chunks that entry statically imports. `budget` weighs that closure plus the app's stylesheet. That is the bytes a reader waits for to see one island, not the bytes on disk. A dynamic import is work the island deferred, so the build reports it and does not charge it.
++
++Chunks need no registration. The entry imports them by relative path, and `base` points at the app's island directory, so the browser resolves them from the entry it already has.
++
++## Rejected: one build per entry
++
++Each entry gets its own Vite build, its own output directory and its own stylesheet.
++
++Nothing is shared, so every island carries a full copy of Vue, frappe-ui and the app's helpers. The Tailwind scan needs a throwaway build ([0003](0003-tailwind-scans-the-module-list-not-a-glob.md)), and this multiplies that build by the number of entries.
++
++The one thing it buys is an output directory per entry, which makes `emptyOutDir` safe. One directory per app is as safe, because the app's island build is the only writer under it.
++
++## Rejected: a hand-written `manualChunks`
++
++Name the shared packages and force them into a vendor chunk.
++
++Rollup already knows which modules two entries reach. A hand-written list is a second description of that, and it goes stale the first time an entry stops importing a package. It also fixes the split at package granularity, where Rollup splits at module granularity.
+diff --git a/ui/island/decisions/0003-tailwind-scans-the-module-list-not-a-glob.md b/ui/island/decisions/0003-tailwind-scans-the-module-list-not-a-glob.md
+new file mode 100644
+index 0000000000..74b9a2347c
+--- /dev/null
++++ b/ui/island/decisions/0003-tailwind-scans-the-module-list-not-a-glob.md
+@@ -0,0 +1,27 @@
++# Tailwind scans the module list, not a glob
++
++Tailwind writes no rule for a class it never scanned. Nothing throws. The component renders unstyled, in a way that reads like a design choice.
++
++The mistake has one shape. Something describes what the bundle holds, and Tailwind scans that description, while something else assembles the bundle. A `content` list that names `.vue` files misses the `.ts` helper that holds the class literals. A list that names the app's own source misses frappe-ui, whose components apply classes on every island.
++
++## Decision
++
++The preset scans the modules the bundle is built from. It runs a first build with no stylesheet, keeps the module list, and discards the output. There is no `content` option for an app to keep.
++
++The list is the bundle, so it cannot drift from the bundle. It covers the app's source and every dependency compiled into it. The island's stylesheet is the only one inside its shadow root, so it has to carry a rule for every class the bundle applies.
++
++The second pass costs about the time of the first. There is one pass per app, not one per island ([0002](0002-an-app-builds-its-islands-together.md)).
++
++## Rejected: a glob wide enough to be safe
++
++A scan of all of an app's source took one island's stylesheet from 32 kB to 259 kB. The difference is the classes of every screen the island does not render.
++
++## Rejected: scan the built JS for class names
++
++It finds the same bugs and a pile of noise. A chunk carries its components' compiled CSS as a string. The escaped selectors in it read as class names, and those classes are already defined a line away.
++
++## The check for the case the derivation does not cover
++
++A full build derives the scan list from the bundle, so the two cannot disagree. Under `watch` they can. The list is fixed at start-up, and an import added after start-up brings in a file nothing scanned. So the preset compares the bundle's module list against the scanned list. If a file is in the first list and not the second, the preset fails the build. Restart the watch to scan it.
++
++The comparison is over files, not classes. Both lists are real paths. The preset wrote the scanned list itself, so this is set membership and needs no glob engine.
+diff --git a/ui/island/decisions/0004-an-app-ships-one-island-stylesheet.md b/ui/island/decisions/0004-an-app-ships-one-island-stylesheet.md
+new file mode 100644
+index 0000000000..5eb0b95861
+--- /dev/null
++++ b/ui/island/decisions/0004-an-app-ships-one-island-stylesheet.md
+@@ -0,0 +1,25 @@
++# An app ships one island stylesheet
++
++The build extracts one stylesheet for all of an app's islands. Every entry registers it under its own `<name>.island.css` key. The host hands each island the same URL, and the mount contract adopts one `CSSStyleSheet` object into every shadow root.
++
++## Decision
++
++`cssCodeSplit: false`, one Tailwind config per app, one sheet.
++
++The sheet is complete on its own. A shadow root inherits no document styles, so the sheet carries `@tailwind base`, which is preflight and the theme tokens, plus the components and utilities layers. The preset rewrites `:root`, `html` and `body` to `:host`, because nothing inside a shadow root matches those.
++
++The browser fetches and parses the sheet once per page, whatever the island count. `adoptedStyleSheets` shares the parsed object, not a copy. An island pays for the sheet once, not once per mount.
++
++The cost is that an island carries rules for classes its siblings use. Utilities compress well. The whole app's island CSS is smaller than the second copy of preflight that per-island sheets would ship.
++
++## Rejected: a stylesheet per island
++
++`cssCodeSplit: true` and a Tailwind config per entry.
++
++Preflight and the theme tokens are the floor of any island sheet, and they repeat in every one. A split also puts the CSS of a shared chunk in its own file. The host would then carry a list of sheets per island instead of one URL, and the mount contract would have to keep their order stable across islands.
++
++## Rejected: a framework stylesheet every island inherits
++
++One sheet built by framework and adopted before the island's own, so islands share preflight and frappe-ui's utilities.
++
++An island's classes come from the modules it is built from ([0003](0003-tailwind-scans-the-module-list-not-a-glob.md)). A sheet built elsewhere is scanned from a different tree. A class that tree does not have gets no rule on any island, and nothing reports it. It also puts framework back in the business of building the app's dependencies ([0001](0001-an-app-bundles-its-own-island.md)).
+diff --git a/ui/island/decisions/0005-the-preset-resolves-its-tooling-from-the-app.md b/ui/island/decisions/0005-the-preset-resolves-its-tooling-from-the-app.md
+new file mode 100644
+index 0000000000..f5637ae2ef
+--- /dev/null
++++ b/ui/island/decisions/0005-the-preset-resolves-its-tooling-from-the-app.md
+@@ -0,0 +1,31 @@
++# The preset resolves its tooling from the app
++
++The preset needs Vite, `@vitejs/plugin-vue`, Tailwind, autoprefixer, TypeScript and frappe-ui's icon resolver to run a build. It loads each one from the app it builds.
++
++## Decision
++
++`loadTools(root)` writes a module into the app's `node_modules/.island/`. The module re-exports every build-time dependency by name, and the preset imports it.
++
++Node resolves a bare specifier from the importing module's real path. A bench links `@framework/ui` by relative path, so an `import "vite"` inside the preset would look beside the framework checkout. A bench never installs a frontend's dependencies there. A file written into the app's own tree resolves against the app's dependencies. The generated Tailwind config sits there for the same reason.
++
++This also settles which versions build an island. The app's lockfile decides. The same lockfile builds the app's SPA, so an island and the app's own pages compile the same frappe-ui the same way.
++
++A specifier that does not resolve fails the build. The error names the app's root and `devDependencies` as the fix. `@framework/ui` declares all of them as optional peer dependencies, so a consuming app is told once, at install.
++
++## Rejected: resolve each specifier by hand
++
++`require.resolve` from a require rooted at the app, or `import.meta.resolve` with the app as the parent.
++
++`require.resolve` reads the `require` condition, so it refuses an ESM-only subpath. `frappe-ui/vite/lucideIconsPlugin` is one. `import.meta.resolve` ignores its parent argument unless Node runs with `--experimental-import-meta-resolve`. It then answers for the preset's own path and reports nothing. The written file hands the whole job to Node's resolver.
++
++## Rejected: framework declares the tooling
++
++Put Vite, Tailwind and the rest in `apps/frappe/package.json`, where the preset's own path resolves them.
++
++Framework then installs a second frontend toolchain it never runs, and pins the versions every app's islands build with. An app on a newer Vite builds its SPA with one version and its islands with another.
++
++## Rejected: the app passes the modules in
++
++`buildIslands({ vite, tailwindcss, ... })`.
++
++It is the same resolution, written out by every app. An app that passes the wrong module finds out inside Rollup.
+diff --git a/ui/island/decisions/0006-the-mount-contract-lives-with-frappe-ui.md b/ui/island/decisions/0006-the-mount-contract-lives-with-frappe-ui.md
+new file mode 100644
+index 0000000000..dc56351284
+--- /dev/null
++++ b/ui/island/decisions/0006-the-mount-contract-lives-with-frappe-ui.md
+@@ -0,0 +1,25 @@
++# The mount contract lives with frappe-ui, not in desk
++
++`mountVueIsland` turns a Vue component into an island. It opens the shadow root, adopts the stylesheets, mirrors the host's theme, gives frappe-ui's overlays a portal target inside the root, and returns the `update`/`unmount` handle. It ships in `@framework/ui`, and the app's build compiles it into the island.
++
++## Decision
++
++The contract lives on the frappe-ui side of the boundary, next to the components it hosts.
++
++Every line of it is about Vue and frappe-ui. It calls `createApp`. It provides `portalTargetKey`. It installs a memory router, because frappe-ui components call `useRouter()` unconditionally. Code that reasons about frappe-ui belongs where frappe-ui is a dependency.
++
++Desk's side of the seam stays in desk. The desk loader resolves the name and assembles the desk context. The host loop calls the island's `mount`. Neither touches Vue, so desk's bundle stays what it is.
++
++`@framework/ui/island` also exports `hostKey` and `useHost`. An island reads its host context through the same module that provides it, so no app declares the symbol again.
++
++## Rejected: desk ships the mount contract
++
++Desk's bundle exposes `frappe.ui.mount_vue_island`, and an island calls it off `window`.
++
++Desk would need Vue, vue-router and frappe-ui in its own dependencies to compile it. Every island on the page would run against desk's copies, which is the shared runtime of [0001](0001-an-app-bundles-its-own-island.md) by another route. It also hides the contract from an app's type checker and bundler.
++
++## Rejected: every app writes its own
++
++A shadow root and a `createApp` are twenty lines, so each app could open its own.
++
++The details are not twenty lines. The portal target, the stacking tier over desk's page controls, the theme attribute inside the root, the compiler's comment handling: each was found once, and each fails without a report when wrong. One implementation is the only way the second app gets them for free.
+diff --git a/ui/island/decisions/0007-reka-ui-is-patched-to-read-the-shadow-root.md b/ui/island/decisions/0007-reka-ui-is-patched-to-read-the-shadow-root.md
+new file mode 100644
+index 0000000000..632cad8c4c
+--- /dev/null
++++ b/ui/island/decisions/0007-reka-ui-is-patched-to-read-the-shadow-root.md
+@@ -0,0 +1,33 @@
++# reka-ui is patched to read the shadow root
++
++frappe-ui's overlays, which are Dialog, Popover, Select and Tooltip, are reka-ui's `DismissableLayer`. That layer finds the other layers with `ownerDocument.querySelectorAll`, and it listens for dismissal on the document.
++
++Neither reaches inside a shadow root. The document query cannot see a layer in an island. The island's events arrive at the document retargeted to the shadow host. So a popover opened over a dialog reads as outside that dialog, and the click that opens the popover closes the dialog under it.
++
++## Decision
++
++`ui/patches/reka-ui+<version>.patch` makes the layer read the tree it lives in. `getRootNode()` answers the shadow root inside an island and the document everywhere else, so nothing outside an island changes. The layer listens on both its own root and the document, and it ignores the document's retargeted copy of an event it already handled.
++
++The combobox's input has the same blind spot: when it loses focus, it looks for its list with `document.getElementById` and closes when it doesn't find it, so a click on an option inside an island closed the list before the click landed. The patch looks the list up in the same root.
++
++reka-ui is the app's dependency, because the app bundles frappe-ui ([0001](0001-an-app-bundles-its-own-island.md)). So the app applies the patch, from this package, in its `postinstall`:
++
++```jsonc
++"postinstall": "patch-package && patch-package --patch-dir node_modules/@framework/ui/patches"
++```
++
++One copy of the patch serves every island host. The version in its file name is the version it was made against. patch-package matches that version exactly and warns on any other, so a reka-ui bump reports the patch instead of dropping it.
++
++This fix belongs upstream. `unovue/reka-ui#1667` tracks it. The release that lands it retires the patch.
++
++## Rejected: portal the overlays to the document
++
++Leave reka-ui alone and let overlays render in `<body>`, where its document queries are right.
++
++An overlay outside the shadow root is outside the island's stylesheet, so it renders unstyled. A copy of the sheet in the document reintroduces the leak the shadow root prevents.
++
++## Rejected: keep the fix in framework
++
++Framework holds `patches/reka-ui+<version>.patch` and applies it on its own install.
++
++Framework does not install reka-ui and does not render an overlay. The patch would sit in a tree where nothing proves it still applies.
+diff --git a/ui/island/decisions/0008-one-host-loop-two-hosts.md b/ui/island/decisions/0008-one-host-loop-two-hosts.md
+new file mode 100644
+index 0000000000..4f8f2bdacf
+--- /dev/null
++++ b/ui/island/decisions/0008-one-host-loop-two-hosts.md
+@@ -0,0 +1,29 @@
++# One host loop, two hosts
++
++Desk was the first host of an island. A frappe-ui app, such as CRM or Insights, is the second. The loop between a name and a mounted island is the same for both. Resolve the name. Import the module. Check that it exports `mount`. Unmount what holds the target. Call `mount`. Keep a handle that survives a re-mount.
++
++## Decision
++
++That loop lives once, in `ui/island/host.js`. Each host is a thin wrapper over it.
++
++The loop imports nothing: not Vue, not frappe-ui, not frappe. Each host injects what differs: a `resolve(name)` that returns the module and stylesheet URLs, and the context the island reads through `useHost()`. The desk loader resolves against `frappe.boot`. `<Island>` calls `frappe.utils.island.get_island_assets`.
++
++Desk keeps what is desk's: the boot registry, the desk context, the `frappe.ui.mount_island` API and the hot-update registration. `<Island>` keeps what is Vue's: the lifecycle and the prop watch.
++
++The handle is synchronous, so the loop owns the load as well as the mount. A caller holds the handle from the first line. `update` and `unmount` work before the module loads. Before this, every host carried the same guard against an import that finished after the caller moved on. Three did.
++
++The loop carries the rules that were each found once and that fail without a report when wrong. A re-mount keeps the handle the caller holds. A module that fails to load leaves the island already on screen alone. The context key is `host`, not `desk`. Inside an island that CRM hosts, the context is CRM's.
++
++## Rejected: two loaders, each with its own loop
++
++The loop is two hundred lines, and two loaders hold it twice. The second copy starts correct and then drifts. The hot re-mount fix landed in desk's loop after the Vue host was written, and the Vue host would not have it.
++
++## Rejected: desk exposes the loop on `window`
++
++`frappe.ui.mount_island` is already global on a desk page, so `<Island>` could call it.
++
++It works only on a desk page. A frappe-ui app is its own SPA, served from its own route, with no desk bundle on it. It would also tie the Vue host to desk's resolution, the boot registry, where it has an API instead.
++
++## Rejected: `<Island>` calls `frappe.ui.mount_island`
++
++The same coupling with an extra step. The component would carry a fallback for when the global is absent, which is every page it runs on.
+diff --git a/ui/island/decisions/0009-an-island-takes-vues-props-object.md b/ui/island/decisions/0009-an-island-takes-vues-props-object.md
+new file mode 100644
+index 0000000000..6cfa79edf4
+--- /dev/null
++++ b/ui/island/decisions/0009-an-island-takes-vues-props-object.md
+@@ -0,0 +1,29 @@
++# An island takes Vue's props object
++
++An island is a Vue component behind a shadow root. A host passes it data and listeners. The host API says how the two travel together.
++
++## Decision
++
++They travel as Vue's props object: data keys and `on*` listener keys in one flat object, exactly what `h(Component, props)` takes.
++
++```js
++frappe.ui.mount_island("insights.dashboard", el, {
++	dashboard: "sales",
++	onNavigate: (route) => frappe.set_route(route),
++	onTitle: (title) => frappe.utils.set_title(title),
++});
++```
++
++`mountVueIsland` hands that object to `h` untouched. `update` merges into it, which is what a re-render does. `<Island>` takes the same object as attributes. Everything but `name` and `context` passes through verbatim, so `@title` and `@navigate` work on it as they do on any component.
++
++The shape has no translation layer, so it has no rules to learn. A caller who knows Vue knows this API. A component author reads the props their component declares.
++
++## Rejected: a structured bag, `{ props, on, model }`
++
++The first shape. `mount.js` turned `on.navigate` into `onNavigate`. `Island.vue` turned `@navigate` into `on.navigate`. Desk's caller wrote a third form. Three translations of one idea, and each one a place where a name can be spelled right and still not arrive. It was also a syntax of our own that nobody knows on arrival.
++
++## Rejected: camelCase listener names, `onUpdateTitle`
++
++It reads better, and it never fires. Vue camelizes a hyphen in an event name, not a colon. `update:title` resolves as the literal key `"onUpdate:title"` and nothing else. A name Vue cannot resolve fails without a report, which is the worst way for a listener to be wrong.
++
++The island API has no colon in an event name any more. [0010](0010-a-page-island-reports-title-and-actions.md) dropped the two it had. The rule still governs any component a host mounts, which is why the object goes to `h` untouched.
+diff --git a/ui/island/decisions/0010-a-page-island-reports-title-and-actions.md b/ui/island/decisions/0010-a-page-island-reports-title-and-actions.md
+new file mode 100644
+index 0000000000..d548162a1d
+--- /dev/null
++++ b/ui/island/decisions/0010-a-page-island-reports-title-and-actions.md
+@@ -0,0 +1,44 @@
++# A page island reports its title and its actions
++
++A page island fills a page. It still needs a page header: a title, and the actions that belong to what it shows. The island knows both, because it loaded the document. The header belongs to the host, which already has one for every other page.
++
++## Decision
++
++A page island ships no header. It reports what a header would say:
++
++- `title`, a `string` or `null`.
++- `actions`, an `Action[]`. An `Action` is `{ label, icon? }` plus either an `onClick` or an `href`.
++
++An `onClick` runs in the island. An `href` is a URL, absolute or site-relative, to a page outside the host app. The action reports where it goes. The host decides what a link out of the app does. A host opens it in a new tab, and may mark the action as one that leaves the app, in its own idiom.
++
++An island that fills less than a page, such as a widget in a workspace, reports neither. A host that has no header binds neither. The `Action` fields are what one island needs, and both hosts show them as a menu row. A new field is a change both hosts make together.
++
++Each host sets its own chrome from the report. Desk sets the page title and fills the page menu. A frappe-ui app fills its `LayoutHeader`. The island does not know which host it is in, and each host's header stays native.
++
++Both are plain events. A Vue host binds them with `@title` and `@actions`. A desk caller passes `onTitle` and `onActions`. See [0009](0009-an-island-takes-vues-props-object.md).
++
++## Rejected: `update:` events, bound with `v-model`
++
++`update:title` and `update:actions`, so that a Vue host writes `v-model:title`.
++
++`v-model:actions` is `:actions` plus `@update:actions`, and the island declares neither prop. The binding passes a value into a component that ignores it, and it reads as state the host and the island share. Nothing is shared. The island reports and the host stores, which is what a plain event says.
++
++The sugar also cost `<Island>` a filter. It had to strip every `update:`-shaped attribute out of the island's props object. Otherwise the value a host bound came back down as a stray attribute, and each report echoed through `update`. A plain event passes nothing down, so the filter went with it.
++
++## Rejected: the island draws its own header
++
++It knows the title first, so it could render the header.
++
++Every host already has a header. The island's header landed under desk's. The dashboard page had to hide desk's page head to make room. That cost it the breadcrumb trail, the page menu and the title slot. All three then reached the island as context it had to render again. A second host would repeat the whole negotiation.
++
++## Rejected: the island opens the other app itself
++
++An action that leaves for another app is an `onClick` that calls `window.open`.
++
++Then the island chose the new tab and a label that named the destination. Both belong to the host. A desk menu row and an in-app header read differently, and only the host knows which it shows. The SPA host had to tell the island not to leave, through a provider flag. That is the island holding a decision it cannot make. An `href` states the destination and stops.
++
++## Rejected: a `header: boolean` prop
++
++Let the caller ask for the header, or not.
++
++A toggle over a design that was wrong on both settings. The island still carries header code, every host still decides, and the two paths drift.
+diff --git a/ui/island/decisions/0011-an-app-claims-a-desk-document-with-doc-events.md b/ui/island/decisions/0011-an-app-claims-a-desk-document-with-doc-events.md
+new file mode 100644
+index 0000000000..e59681b5f6
+--- /dev/null
++++ b/ui/island/decisions/0011-an-app-claims-a-desk-document-with-doc-events.md
+@@ -0,0 +1,29 @@
++# An app claims a desk document with `doc_events`
++
++Desk draws `Dashboard` and `Dashboard Chart` itself. An app that keeps its own dashboards wants its island to draw them instead. Only the app knows which documents are its own.
++
++## Decision
++
++The island that draws a document is carried in `__onload.island`, as `{"name", "props"}`. `name` is an island of the app's. `props` is the island's props object. When the key is absent, desk draws the document.
++
++The app sets the key from an `onload` handler it declares in `doc_events`:
++
++```python
++doc_events = {"Dashboard": {"onload": "someapp.desk.island.dashboard"}}
++
++def dashboard(doc, method=None):
++	if doc.someapp_dashboard:
++		doc.set_onload("island", {"name": "someapp.dashboard", "props": {"dashboard": doc.someapp_dashboard}})
++```
++
++`Document.run_method("onload")` already composes every `doc_events` handler, and `frappe.desk.form.load` runs it for every document the client fetches. So framework adds nothing. The desk page and the chart widget read one `__onload` key. A further document an app may draw needs no framework change.
++
++Framework reads no field of the app's own. The app decides on a Custom Field, on a naming rule, or on anything else it holds.
++
++This seam is separate from the island registry in `frappe.utils.island`. The registry is universal. It turns a name into a bundle and knows nothing about documents. It stays the only place that knows whether an island exists.
++
++## Rejected: a `dashboard_renderer` hook per document
++
++A hook named for the document. Its method takes the document and returns the island or `None`. Framework ran every app's method, validated the answer, warned on a collision, and wrote the winner to `__onload`.
++
++It re-implemented `doc_events` with a worse name. Every document desk draws needed a new hook, a new `onload` override, and a line in `hooks.py`. The validation and collision code guarded a shape only the app that returned it could get wrong. An app that gets it wrong sees the same result either way: its island does not draw. `doc_events` already orders the handlers of two apps. The second app overwrites the first, which is the same outcome the warning described.
+diff --git a/ui/island/decisions/0012-a-desk-page-can-be-an-island.md b/ui/island/decisions/0012-a-desk-page-can-be-an-island.md
+new file mode 100644
+index 0000000000..c887dfa1d5
+--- /dev/null
++++ b/ui/island/decisions/0012-a-desk-page-can-be-an-island.md
+@@ -0,0 +1,35 @@
++# A desk page can be an island
++
++A desk page is a `.js` file with `on_page_load`. An app that wanted a Vue screen at a desk route wrote that file, built an island in its own frontend, declared it in `hooks.py`, and then repeated the mount, the chrome and the unmount by hand. `dashboard-view` is that page written once. It is sixty lines before it draws anything, and every one of its rules fails without a report when wrong.
++
++## Decision
++
++`Page` grows a `type`. When it is "Frappe UI", an island draws the page.
++
++`pageview.js` builds the page, mounts the island, hands it the route below the page, and sets the head from what the island reports ([0010](0010-a-page-island-reports-title-and-actions.md)). The page ships no script. `load_assets` does not read one, so none reaches the client, where an island's entry would be eval'd as a classic script and fail.
++
++The page registers its own island, so a page island needs no line of Python. The name is `<app>.page.<page name>`, derived the same way on both sides, and the `page` infix keeps it clear of the names an app's own build registers.
++
++Amended by [0014](0014-assets-json-is-the-island-registry.md). `get_ui_islands` read Page rows beside a `ui_islands` hook first. The build registers a page island like any other now, and a page may name an island the app built instead of having one built for it.
++
++The starter is two files beside the page's json, `<page>.island.js` and `<page>.vue`, written once by `on_update` in place of the page script every other type gets.
++
++Blank is the other type, and every page that exists today is blank. Readers branch on "Frappe UI" alone, so nothing was migrated and no app's exported json moved.
++
++## Rejected: a `Route Type`
++
++The routing work has a `Route` table whose rows name a `Route Type`, and only a `Route Type` names code. An island-drawn route looks like one of those.
++
++`Route` registers mounts. A desk page is content behind a mount desk already owns, so this is not the same question. The routing model is also still a set of decisions with no code behind it, and a starter cannot wait on it.
++
++## Rejected: the scaffold mounts the island
++
++`on_update` writes a `.js` that calls `frappe.ui.mount_island` with the title, the actions and the unmount spelled out, and `type` is only a flag that chose a template.
++
++Every page then starts with a correct copy and drifts. The route-race guard `dashboard-view` needed was found after that page was written, and no scaffolded page would ever get it. It also makes `type` a record of how a page was once created rather than a fact about how it is drawn.
++
++## Rejected: the page names its bundle in `hooks.py`
++
++The registry an app writes by hand, with the page pointing at a bundle name.
++
++Three places to keep in step for a page whose parts are all in one folder, and the one a starter would forget. Reading the rows adds a source to the registry, not a second way to resolve a name: the loader, `get_island_assets` and `<Island>` are unchanged.
+diff --git a/ui/island/decisions/0013-framework-builds-page-islands.md b/ui/island/decisions/0013-framework-builds-page-islands.md
+new file mode 100644
+index 0000000000..5897a1d9d2
+--- /dev/null
++++ b/ui/island/decisions/0013-framework-builds-page-islands.md
+@@ -0,0 +1,41 @@
++# Framework builds page islands
++
++An island builds on the app's own tooling ([0005](0005-the-preset-resolves-its-tooling-from-the-app.md)). A page island cannot. Most apps that ship desk pages have no frontend at all, and framework itself has none. Under that rule the first step of a starter is "set up Vite", which is the whole barrier and has nothing to do with islands.
++
++## Decision
++
++One build, run by framework, for every Frappe UI page on the bench. Its vite root is `island-toolchain/`, a directory beside `ui/` whose only content is the build's own dependencies.
++
++This amends 0005 rather than reversing it. The preset still resolves its tooling from its root. For this one build that root is framework's, and an app's own islands are untouched.
++
++So a page island compiles against framework's frappe-ui, `@framework/ui`, and nothing of the app's. That is the shape of a starter and not a limitation to work around: a page that needs the app's own components has outgrown the scaffold, and it moves into the app's frontend as an ordinary island.
++
++Amended by [0014](0014-assets-json-is-the-island-registry.md). Such a page keeps its route: it names the app's island in its `island` field, and this build skips it.
++
++One build and not one per app, for the reason in [0002](0002-an-app-builds-its-islands-together.md) and again for [0003](0003-tailwind-scans-the-module-list-not-a-glob.md): every page island on the bench shares one vue chunk and one frappe-ui chunk, and the scan's throwaway first pass runs once instead of once per app. `after_app_build` runs it, because any app's build can be the one that added a page.
++
++Amended by [0015](0015-framework-builds-its-own-islands.md). Framework's own islands, such as `frappe.chart`, are a second build that `bench build` runs itself, and its failure fails the command.
++
++Output is `sites/assets/frappe/dist/page-island/`, not `dist/island/`. A build owns every assets.json key pointing into its own directory, so framework's build and an app's own build need two directories or they drop each other's keys.
++
++Discovery reads each page's json for its name and its type, rather than reading the folder. The folder is the scrubbed name, and scrubbing is not reversible: `sales_dashboard` could be either `sales-dashboard` or `sales_dashboard`, and the name the build picks has to be the one `page_island_name` picks in Python.
++
++## Rejected: the app builds its own page islands
++
++The rule 0005 already sets, applied to pages.
++
++It works only for an app that already has a frontend, which is the minority and never framework. The setup it asks for is a `package.json`, a lockfile, a build script and an `after_build` hook, all before the first page renders. The app's build stays the graduation path, which is where an island that needs the app's own code belongs anyway.
++
++## Rejected: install the toolchain at `ui/`
++
++The simpler-looking version of the same idea: put the dependencies in `@framework/ui` itself and root the build there.
++
++A bench links `@framework/ui` into every consuming app by symlink, and node resolves from a module's real path. A `vue` and a `frappe-ui` sitting in `ui/node_modules` are a second copy for every app that links the package. The README calls that out as the thing that breaks provide/inject and doubles vue. A sibling directory is never on the walk up from `ui/src`.
++
++The same holds for a toolchain anywhere inside `ui/`, which is where it first lived, at `ui/vite/island/toolchain/`. Its own link to `@framework/ui` pointed at a folder that contained the link, so any copy that followed symlinks looped, and every app that links the package carried the toolchain's `node_modules` with it.
++
++## Rejected: framework hosts a frontend of its own
++
++Give `apps/frappe` a real frontend and let page islands build there.
++
++That frontend is being introduced for the desk work already. Standing up a second one now means merging or deleting one later, and it carries an SPA's worth of configuration for a build that needs six packages.
+diff --git a/ui/island/decisions/0014-assets-json-is-the-island-registry.md b/ui/island/decisions/0014-assets-json-is-the-island-registry.md
+new file mode 100644
+index 0000000000..2dda765713
+--- /dev/null
++++ b/ui/island/decisions/0014-assets-json-is-the-island-registry.md
+@@ -0,0 +1,33 @@
++# assets.json is the island registry
++
++An island is code an app exposes: a name, and props that select the content. `insights.dashboard` draws any dashboard. A **host** is anything that names an island and passes props — a desk `Page`, a workspace block, a form, or `<Island>` in another app's frontend. An island cannot rely on its host, so it works when the host ignores `title` and `actions`, and it takes its content from props, never from a desk route.
++
++That model has one name for two registrations: the `ui_islands` hook named the island, and the build's asset key named the bundle. The hook was a rename between them.
++
++## Decision
++
++The build registers the island. An island's name is its asset key without `.island.js`, and the `ui_islands` hook goes. This amends [0001](0001-an-app-bundles-its-own-island.md), whose seam read the bundle name from the hook, and [0013](0013-framework-builds-page-islands.md), whose page islands registered from their `Page` rows.
++
++`get_ui_islands()` keeps the `.island.js` keys whose app is installed on the site. The app comes from the URL, `/assets/<app>/dist/...`, and for a page island, which framework builds into framework's own dist, from its name `<app>.page.<page name>`. Filtering is the one job the hook did that nothing else does, because assets.json is bench-wide and a site holds a subset of the bench's apps.
++
++Filtering is not a gate. An island's bundle is a public static file, and what it draws is protected by the app's own API. The hook never gated anything either.
++
++Two builds writing one key is an error `writeIslandAssets` reports, because two islands claiming one name is two hosts drawing the wrong thing, and whichever built last would win silently.
++
++A `Page` of type "Frappe UI" names an island the app built, in an `island` field. Empty still means the island framework builds from the page's folder. So the app's own components reach a desk route, which 0013 said had "outgrown the scaffold", and the page keeps what the page type gives it: the mount, the unmount, the route race, `route` and `query` as props, and a head drawn from what the island reports. `Page.get_island_name` derives the name when the field is empty, `load_assets` hands it to desk, and no save stores it.
++
++The cost is that a name is now a Vite entry name. A rename breaks every host that names it, including the workspace files of apps that never build.
++
++## Rejected: the hook stays, and a page names a hook entry
++
++Keep `ui_islands` as the registry and have the `Page` field point into it.
++
++It keeps a rename nobody asked for. Every island is then two lines in two files that must agree, and the failure when they do not is a blank page. The hook's only real job, the installed-app filter, is a property of the URL the build already wrote.
++
++It also cannot reach the build. Page discovery is Node, in `vite/island/pages.js`, and it cannot read `hooks.py`. A page that names an app's island still has to tell that build to skip it, which is a fact the page's own json has to carry.
++
++## Rejected: the page's component wraps `<Island>`
++
++No framework change. The scaffolded `.vue` renders `<Island name="insights.dashboard">` and forwards `route` and `query`.
++
++Two shadow roots, one inside the other, for one screen. The overlay portal target, the theme mirroring and the stylesheet adoption each run twice, and the outer island carries a second copy of Vue and frappe-ui for a component that renders one tag. It also keeps building a page bundle for a page whose content is elsewhere.
+diff --git a/ui/island/decisions/0015-framework-builds-its-own-islands.md b/ui/island/decisions/0015-framework-builds-its-own-islands.md
+new file mode 100644
+index 0000000000..0d82b370e7
+--- /dev/null
++++ b/ui/island/decisions/0015-framework-builds-its-own-islands.md
+@@ -0,0 +1,25 @@
++# Framework builds its own islands
++
++Desk draws its charts with an island, `frappe.chart`. A page island is additive: a page that is unbuilt shows an unbuilt state and nothing else breaks. A chart island is not. Every report, dashboard and form graph draws through it, so an unbuilt chart is a broken desk.
++
++## Decision
++
++Framework builds its own islands like any app builds its own ([0001](0001-an-app-bundles-its-own-island.md), [0002](0002-an-app-builds-its-islands-together.md)): one build, all entries, output in `sites/assets/frappe/dist/island/`. It roots the build at `island-toolchain/` like the page-island build ([0013](0013-framework-builds-page-islands.md)), and the two share the install step.
++
++The entries are a table in `ui/vite/island/framework.js`, not a scan. They are a fixed part of framework, and a missing entry fails the build instead of dropping out of it.
++
++`bench build` runs it straight after esbuild, and a failure fails the command. The page-island build still runs from `after_app_build` and only warns. `bench watch` starts both watchers.
++
++This amends 0013, which had framework run one island build, from the hook. Each build ships one stylesheet ([0004](0004-an-app-ships-one-island-stylesheet.md)), so framework now ships two: one for its own islands, one for page islands.
++
++The cost is a second build pass and a second copy of Vue and frappe-ui on disk. A page that shows a chart and a page island loads both.
++
++## Rejected: chart entries in the page-island build
++
++Add `frappe.chart` to the entries of the build that already runs on every bench, so it shares that build's Vue and frappe-ui chunks.
++
++One Rollup build fails as a whole. A syntax error in any app's page island would take desk's charts down with it, so the build could not fail `bench build` without making every app's page fatal too. The build also owns `dist/page-island/` and its keys, which would then mix islands with two failure rules in one directory.
++
++## Rejected: register the build first in `after_app_build`
++
++An exception there also aborts `bench build`. But the hook is how an app reacts to another app's build, and this is framework's own asset build, with its own failure rule. `build()` calls it next to esbuild, where a reader looks for what `bench build` builds.
+diff --git a/ui/island/decisions/0016-desk-charts-are-frappe-ui-charts.md b/ui/island/decisions/0016-desk-charts-are-frappe-ui-charts.md
+new file mode 100644
+index 0000000000..931cc9a4bb
+--- /dev/null
++++ b/ui/island/decisions/0016-desk-charts-are-frappe-ui-charts.md
+@@ -0,0 +1,39 @@
++# Desk charts are frappe-ui charts
++
++Desk draws its charts with frappe-charts. frappe-ui ships a family of charts that apps built on it already use, and desk's copies of their colours drift from them. Desk now draws a chart with the `frappe.chart` island ([0015](0015-framework-builds-its-own-islands.md)), through one call, `frappe.ui.chart(el, config)`.
++
++## Decision
++
++The chart config is frappe-ui's: the props of the chart component `type` names (`bar`, `line`, `area`, `donut`, `funnel`, `heatmap`, `calendar-heatmap`, `percentage-bar`, `sankey`, `scatter`, and `number` for `NumberCard`), plus `fieldtype`, `options`, `precision` and `height`. It is JSON only, so a report or a Dashboard Chart can store it and the server can send it.
++
++Values read the way desk prints a field. `fieldtype`, `options` and `precision`, on the chart or on one series, form the df desk's formatter reads, and the island calls it through the desk context (`format`, `format_axis_number`). A value axis is shortened and reads as its first series, so a Currency axis keeps its symbol. A config never carries a function. The config is the doc the formatter reads, so `options: "currency"` takes the chart's `currency`, as report charts already send it. `currency` alone implies `fieldtype: "Currency"`. `echartOptions` passes through to frappe-ui but is not part of the contract: it couples a saved config to echarts' option tree.
++
++The frappe-charts shape (`data.labels` / `data.datasets`, heatmap `data.dataPoints`) is an input, not a second contract. `legacy_config.js` converts it inside the island, in one place, and every render point and every saved `custom_options` goes through that one conversion. A key it has no equivalent for is dropped. In developer mode it warns once per key. A frappe-charts pie draws as a donut.
++
++The flag lives in `frappe.ui.chart` and nowhere else. A legacy config draws with frappe-charts while System Settings' `use_classic_charts` is on. Any other config always draws with the island. Render points call `frappe.ui.chart` unconditionally. A caller whose classic path differs asks `frappe.ui.chart.is_classic(config)`, so the setting's name stays in one file. A classic chart's handle is the frappe-charts chart itself, so an app that reaches into it keeps working while the setting is on. The island's handle for a legacy config keeps the `data` and `draw()` that apps already reach for, and nothing else of `frappe.Chart`.
++
++`frappe.Chart`, `frappe.utils.make_chart` and `frappe.ui.RealtimeChart` stay frappe-charts, unchanged. Apps that call them keep what they draw.
++
++Each is deprecated. It warns once per page, the first time an app calls it, and names `frappe.ui.chart`. Removal waits for a later major release. Desk's own paths, `frappe.ui.chart` under classic charts included, hold their own reference to frappe-charts and never warn. The old calls are not shimmed onto the island: an app that reaches into a frappe-charts instance would break with no warning, where the warning lets it move while its chart still draws. See the rejected compat shim below.
++
++A number card is a chart of type `number`, in the same island. Use Classic Charts governs it too: while the setting is on, the Number Card widget keeps desk's own markup, and the widget asks `frappe.ui.chart.is_classic({ type: "number" })`. The widget sends the title, value, colour and the percentage change as `delta`, and no sparkline. It keeps its head, with the title and the refresh, edit and filter actions, and its surface, so it sends `title: ""` and `card: false`. The value goes as the text the classic card prints, formatted in desk with the card's whole field and doc, currency included, so both modes read the same. A field's own options, such as a Duration's `hide_seconds` or the field a Float names for its currency, survive only that way. A change with no previous period to compare against draws no delta, where the classic card prints 0 %.
++
++An empty Line Dashboard Chart draws its sample line under classic charts only. frappe-ui has no line chart without axes, and its shadow root keeps out the desk CSS that strips them.
++
++## Rejected: the frappe-charts shape stays the contract
++
++Every render point already builds it, so converting at the island would be the whole change.
++
++It makes the conversion permanent. Its option names describe frappe-charts' drawing (`regionFill`, `spaceRatio`, `xAxisMode`), and its formatting is functions, which no stored config can hold. Each frappe-ui feature would need a frappe-charts-shaped name first. As an input it can shrink to nothing; as the contract it cannot.
++
++## Rejected: `frappe.Chart` becomes a compat shim
++
++Point `frappe.Chart` at the island, so every caller in every app moves at once.
++
++`frappe.Chart` is frappe-charts' API: `addDataPoint`, `removeDataPoint`, `export()`, its DOM, and the class `RealtimeChart` extends. An app that reaches into any of these breaks with no flag to turn back. A new call is opt-in by the caller, and the old one is still there for what the new one cannot do.
++
++## Rejected: a flag at each render point
++
++Each render point checks the setting and picks its chart.
++
++Seven render points then hold seven copies of one rule, and an app that adopts `frappe.ui.chart` has to copy it an eighth time. Removing classic charts means finding every copy. With the check in one call, removing it is one deletion.
+diff --git a/ui/island/decisions/README.md b/ui/island/decisions/README.md
+new file mode 100644
+index 0000000000..04585629ea
+--- /dev/null
++++ b/ui/island/decisions/README.md
+@@ -0,0 +1,7 @@
++# Island decisions
++
++Decisions for the desk island subsystem: the mount contract in `ui/island/`, the Vite preset in `ui/vite/island/`, the host loop and its Vue host in `ui/island/host.js` and `ui/island/Island.vue`, and the desk loader in `frappe/public/js/frappe/ui/island/`.
++
++One decision per file. A decision belongs here when it has a rejected alternative that someone will propose again. A platform constraint that explains one line of code stays a comment at that line.
++
++Keep each file to one screen.
+diff --git a/ui/island/host.js b/ui/island/host.js
+new file mode 100644
+index 0000000000..efa3fe18b2
+--- /dev/null
++++ b/ui/island/host.js
+@@ -0,0 +1,246 @@
++/**
++ * The host loop: what every host of an island does, once.
++ *
++ *     import { mountIsland } from "@framework/ui/island/host";
++ *
++ *     const island = mountIsland("insights.dashboard", el, {
++ *         resolve: (name) => ({ js: "/assets/…island.js", css: "/assets/…island.css" }),
++ *         host: { locale, user, navigate },
++ *         props: {
++ *             dashboard: "sales",
++ *             onNavigate: (route) => router.push(route),
++ *             onTitle: (title) => (document.title = title),
++ *         },
++ *     });
++ *     island.update({ filters });
++ *     await island.ready;
++ *     island.unmount();
++ *
++ * The loop imports the module a name resolves to, checks that it exports
++ * `mount`, hands the target to it, and returns a handle that survives a
++ * re-mount.
++ *
++ * The handle returns at once, before the module loads, so a caller holds what
++ * it must later release from the first line. `update` merges into the props the
++ * mount starts from. `unmount` cancels a pending load. `ready` reports the load.
++ * It resolves with the handle when the island is on the page, and it rejects
++ * with what the load threw. A cancelled load resolves, because nothing failed.
++ *
++ * `props` is Vue's props object: data keys and `on*` listener keys in one flat
++ * object, exactly as `h(Component, props)` takes them. A hyphen or a colon in an
++ * event name stays quoted. Write `"onUpdate:modelValue"`, not
++ * `onUpdateModelValue`, which Vue never resolves.
++ *
++ * This module imports nothing: not Vue, not frappe-ui, not frappe. Each host
++ * injects its resolver. The desk loader resolves against `frappe.boot`, and
++ * `<Island>` resolves over an API call. See
++ * decisions/0008-one-host-loop-two-hosts.md.
++ */
++
++/**
++ * @typedef {Object} IslandAssets
++ * @property {string} js            Module URL to import.
++ * @property {string|null} [css]    Stylesheet URL to adopt.
++ */
++
++/**
++ * @typedef {(name: string) => IslandAssets|Promise<IslandAssets>} IslandResolver
++ */
++
++/**
++ * @typedef {Object} IslandHandle
++ * @property {(props: Object) => void} update
++ * @property {() => void} unmount
++ * @property {Promise<IslandHandle>} ready
++ */
++
++// target element -> entry. One entry per target. A mount into a target replaces
++// what holds it. A Map, not a WeakMap, because `reloadChangedIslands` must walk
++// what is live on the page.
++const islands = new Map();
++
++/**
++ * @param {string} name       Island name, as the host's resolver knows it.
++ * @param {HTMLElement|JQuery} el
++ * @param {{ resolve: IslandResolver, host?: Object, props?: Object }} options
++ * @returns {IslandHandle}
++ */
++export function mountIsland(name, el, options = {}) {
++	const target = resolveElement(el);
++	if (typeof options.resolve !== "function") {
++		throw new Error("mountIsland: no resolve(name) given");
++	}
++
++	// The target holds one island. This releases whatever holds it, a pending
++	// load included. That load mounts nothing when it lands.
++	unmountIsland(target);
++
++	const entry = {
++		name,
++		resolve: options.resolve,
++		host: options.host || {},
++		props: { ...(options.props || {}) },
++		url: null,
++		handle: null,
++		loading: false,
++		cancelled: false,
++	};
++	islands.set(target, entry);
++
++	const handle = {
++		// Both read `entry`, never the handle a load mounted. A re-mount
++		// replaces that handle, and the caller keeps this object across it.
++		update: (props) => {
++			// The entry keeps the props too, so a pending mount starts from the
++			// latest props, and a re-mount starts from what the island last showed.
++			entry.props = { ...entry.props, ...props };
++			entry.handle?.update(props);
++		},
++		// Unmounts this island and only this one. A second call does nothing. A
++		// call after another mount took the target does nothing.
++		unmount: () => {
++			if (islands.get(target) === entry) unmountIsland(target);
++		},
++		ready: null,
++	};
++
++	handle.ready = loadInto(target, entry).then(
++		() => handle,
++		(e) => {
++			// The caller cancelled this load and moved on.
++			if (entry.cancelled) return handle;
++			throw e;
++		}
++	);
++
++	return handle;
++}
++
++/** Unmounts the island in `target`, if any. Safe to call at any time. */
++export function unmountIsland(el) {
++	const target = el && el.jquery ? el[0] : el;
++	const entry = islands.get(target);
++	if (!entry) return;
++	islands.delete(target);
++	entry.cancelled = true;
++	entry.handle?.unmount();
++	entry.handle = null;
++}
++
++/**
++ * Re-mounts the live islands whose module URL moved. A host calls this after a
++ * rebuild. Unmount is idempotent, so a re-mount in place is safe.
++ *
++ * @param {IslandResolver} [resolve]  Overrides each entry's own resolver, for a
++ *                                    host whose resolution changed with the build.
++ * @returns {Promise<void>}
++ */
++export async function reloadChangedIslands(resolve) {
++	for (const [target, entry] of [...islands]) {
++		if (!document.body.contains(target)) {
++			unmountIsland(target);
++			continue;
++		}
++
++		// An entry still loading is about to mount what it resolved. A second
++		// load into it would race that one.
++		if (entry.loading) continue;
++
++		if (resolve) entry.resolve = resolve;
++
++		try {
++			if ((await entry.resolve(entry.name)).js === entry.url) continue;
++		} catch (e) {
++			console.error(e);
++			continue;
++		}
++
++		await loadInto(target, entry).catch((e) =>
++			console.error(`island: could not re-mount "${entry.name}"`, e)
++		);
++	}
++}
++
++/**
++ * Loads the island `entry.name` names into `target`, and records the mounted
++ * handle on the entry. A re-mount keeps the entry, so the handle the caller
++ * holds still reaches the island on the page.
++ *
++ * The entry releases what it holds only after the new module loads. A module
++ * that fails to load leaves the island already on screen alone.
++ *
++ * A cancelled entry mounts nothing, and drops what it already mounted. The
++ * cancel can land at any await, the one inside `mount` included.
++ */
++async function loadInto(target, entry) {
++	entry.loading = true;
++	try {
++		const assets = await entry.resolve(entry.name);
++		if (entry.cancelled) return;
++
++		if (assets.css) preloadStyleSheet(assets.css);
++		const module = await import(/* @vite-ignore */ assets.js);
++		if (entry.cancelled) return;
++
++		if (typeof module.mount !== "function") {
++			throw new Error(`Island "${entry.name}" (${assets.js}) does not export mount()`);
++		}
++
++		// The handle clears with the island it names. A mount that fails below
++		// then leaves no dead handle to call through.
++		entry.handle?.unmount();
++		entry.handle = null;
++
++		const props = entry.props;
++		const handle = await module.mount(target, {
++			// `host` is the context key the mount contract reads. See
++			// `IslandHost` in context.js. The key is the same whichever host
++			// fills it.
++			host: entry.host,
++			props,
++			styles: assets.css ? [assets.css] : [],
++		});
++
++		if (entry.cancelled) return handle.unmount();
++		entry.handle = handle;
++		entry.url = assets.js;
++		if (entry.props !== props) handle.update(entry.props);
++	} finally {
++		entry.loading = false;
++	}
++}
++
++/**
++ * Starts downloading an island before anything mounts it, for a host that knows
++ * the island early. A mount of the same assets later reuses both downloads.
++ *
++ * @param {IslandAssets} assets
++ */
++export function preloadIsland(assets) {
++	if (assets.css) preloadStyleSheet(assets.css);
++	// the mount imports the same URL and reports a failure itself
++	import(/* @vite-ignore */ assets.js).catch(() => {});
++}
++
++/**
++ * Starts the stylesheet download alongside the module's. `mount` fetches the
++ * sheet only after every chunk has loaded and run. A `fetch` preload with
++ * `crossorigin` matches that `fetch()`, so the browser sends one request.
++ */
++function preloadStyleSheet(url) {
++	if (document.head.querySelector(`link[rel="preload"][href="${CSS.escape(url)}"]`)) return;
++	const link = document.createElement("link");
++	link.rel = "preload";
++	link.as = "fetch";
++	link.crossOrigin = "anonymous";
++	link.href = url;
++	document.head.append(link);
++}
++
++function resolveElement(el) {
++	const target = el && el.jquery ? el[0] : el;
++	if (!target || !target.appendChild) {
++		throw new Error("island: mount target is not an element");
++	}
++	return target;
++}
+diff --git a/ui/island/index.js b/ui/island/index.js
+new file mode 100644
+index 0000000000..2ad887142e
+--- /dev/null
++++ b/ui/island/index.js
+@@ -0,0 +1,8 @@
++// The island client contract: what an app's island entry imports.
++//
++// The build side is `@framework/ui/vite/island`. The desk side is
++// `frappe.ui.mount_island`, which resolves an island's name and calls the
++// `mount` export this module's `mountVueIsland` returns a handle for.
++
++export { mountVueIsland } from "./mount.js";
++export { hostKey, useHost } from "./context.js";
+diff --git a/ui/island/mount.js b/ui/island/mount.js
+new file mode 100644
+index 0000000000..62bbd6bded
+--- /dev/null
++++ b/ui/island/mount.js
+@@ -0,0 +1,233 @@
++/**
++ * `mountVueIsland`: the mount contract an island entry is built on.
++ *
++ *     import { mountVueIsland } from "@framework/ui/island";
++ *     import App from "./App.vue";
++ *
++ *     export const mount = (el, context) =>
++ *         mountVueIsland(el, { ...context, component: App });
++ *
++ * The entry ships one `mount(el, context)` export. The host loop resolves the
++ * island's name, hands over an empty element and the `context` below, and holds
++ * the returned handle.
++ *
++ * A shadow root isolates the island. The boundary encapsulates CSS both ways.
++ * The island ships its normal preflight, and nothing crosses into desk's
++ * Bootstrap DOM. See decisions/0001-an-app-bundles-its-own-island.md.
++ */
++
++import { createApp, h, ref, shallowRef } from "vue";
++import { createMemoryHistory, createRouter } from "vue-router";
++import { portalTargetKey } from "frappe-ui";
++
++import { hostKey } from "./context.js";
++import { currentTheme, onThemeChange } from "./theme.js";
++
++// url -> Promise<CSSStyleSheet>. One sheet object per URL for the whole page,
++// adopted into every shadow root. The browser fetches and parses it once.
++const styleSheets = new Map();
++
++/**
++ * @typedef {Object} MountVueIslandOptions
++ * @property {any} component            Vue component to render.
++ * @property {import('./context.js').IslandHost} [host]
++ *                                      Ambient host context (host-injected).
++ * @property {Object} [props]           Vue's props object: data and `on*`
++ *                                      listeners, as `h()` takes them.
++ * @property {string[]} [styles]        Stylesheet URLs to adopt, in order
++ *                                      (host-injected).
++ * @property {(app: any) => void} [configure]  Called with the Vue app before
++ *                                      mount, for plugins and global components.
++ * @property {Array} [routes]           vue-router routes. Default none.
++ * @property {Object} [history]          vue-router history for those routes, such
++ *                                      as a web history for an island that fills
++ *                                      its page. Default a memory history.
++ */
++
++/**
++ * `el` is the empty element the host loop gives this island. The loop owns the
++ * target, so nothing here unmounts what it finds there.
++ *
++ * @param {HTMLElement} el
++ * @param {MountVueIslandOptions} options
++ * @returns {Promise<{ app: any, shadow_root: ShadowRoot, update: (props: Object) => void, unmount: () => void }>}
++ */
++export async function mountVueIsland(el, options) {
++	const {
++		component,
++		host = {},
++		props = {},
++		styles = [],
++		configure,
++		routes,
++		history,
++	} = options || {};
++
++	if (!component) {
++		throw new Error("mountVueIsland: no component given");
++	}
++	if (!el || !el.appendChild) {
++		throw new Error("mountVueIsland: mount target is not an element");
++	}
++	// showPopover() below needs a connected element
++	if (!el.isConnected) {
++		throw new Error("mountVueIsland: mount target is not in the document");
++	}
++
++	const shadowHost = document.createElement("div");
++	shadowHost.className = "frappe-island";
++	// The host bounds the box and the island lays out inside it. A percentage
++	// height chains through only if both this host and the root below carry it.
++	// Against an auto-height target it resolves to auto, so a content-sized
++	// island is unchanged.
++	shadowHost.style.height = "100%";
++	el.appendChild(shadowHost);
++	const shadowRoot = shadowHost.attachShadow({ mode: "open" });
++
++	// frappe-ui's dark selector `[data-theme="dark"] .dark\:x` is a descendant
++	// rule, so the attribute must sit inside the shadow root. No descendant
++	// combinator reaches :host.
++	const root = document.createElement("div");
++	root.className = "frappe-island-root";
++	root.style.height = "100%";
++
++	// Overlays such as Dialog, Popover and Select portal here, not to <body>, so
++	// they render inside the styled tree. reka-ui reads its target from an
++	// explicit prop first, then from the host inject, then from its own default.
++	// Only an element survives the shadow boundary, because the browser queries
++	// a selector string against the document.
++	const portal = document.createElement("div");
++	portal.className = "frappe-island-portal";
++	// The top layer escapes any ancestor stacking context (a workspace sits in
++	// Editor.js's `.codex-editor` at z-index 1, under desk's sidebar). A z-index
++	// cannot. Staying in the shadow root keeps the reka patch, the adopted sheet
++	// and the theme attribute; a second host on <body> would split reka's layers
++	// across two roots. Needs Safari 17 / Chrome 114, which `target: esnext`
++	// already assumes.
++	portal.setAttribute("popover", "manual");
++	// undo the UA popover box; the overlays inside are `position: fixed`, so the
++	// portal shrink-wraps to nothing and needs no pointer-events (a non-modal
++	// popover would inherit `none` and go dead)
++	Object.assign(portal.style, {
++		inset: "auto",
++		width: "auto",
++		height: "auto",
++		margin: "0",
++		padding: "0",
++		border: "0",
++		background: "none",
++		overflow: "visible",
++		color: "inherit",
++	});
++
++	shadowRoot.append(root, portal);
++	portal.showPopover();
++
++	const applyTheme = (theme) => {
++		root.setAttribute("data-theme", theme);
++		portal.setAttribute("data-theme", theme);
++	};
++	applyTheme(currentTheme());
++
++	const theme = ref(currentTheme());
++	const stopTheme = onThemeChange((next) => {
++		theme.value = next;
++		applyTheme(next);
++	});
++
++	// Theme joins the host context here, because only this side of the boundary
++	// can make it a tracked read. A mid-session theme switch then re-renders the
++	// island. This is a new object, because the one the host passed is the host's.
++	const context = {
++		...host,
++		get theme() {
++			return theme.value;
++		},
++	};
++
++	try {
++		return await build();
++	} catch (e) {
++		// The shadow host is in the page already, so a failed stylesheet fetch or
++		// a throwing component would leave an empty island behind.
++		stopTheme();
++		shadowHost.remove();
++		throw e;
++	}
++
++	async function build() {
++		// In order, so a sheet later in the list wins ties.
++		shadowRoot.adoptedStyleSheets = await Promise.all(styles.map(sharedStyleSheet));
++
++		const currentProps = shallowRef({ ...props });
++
++		const app = createApp({
++			name: "FrappeIsland",
++			render: () => h(component, currentProps.value),
++		});
++
++		// Desk globals, so components that call `__()` or read `frappe` work.
++		window.SetVueGlobals?.(app);
++
++		// frappe-ui components such as Button and MultiSelect always call
++		// useRouter(). A memory router keeps that inject resolvable. An island that
++		// wants navigation of its own passes real routes.
++		app.use(createRouter({ history: history || createMemoryHistory(), routes: routes || [] }));
++
++		app.provide(portalTargetKey, portal);
++		app.provide(hostKey, context);
++
++		configure?.(app);
++
++		app.mount(root);
++
++		let destroyed = false;
++		const handle = {
++			app,
++			shadow_root: shadowRoot,
++			update(next) {
++				if (destroyed) return;
++				currentProps.value = { ...currentProps.value, ...next };
++			},
++			unmount() {
++				if (destroyed) return;
++				destroyed = true;
++				stopTheme();
++				try {
++					app.unmount();
++				} catch (e) {
++					// A failed unmount must not block the removal of the shadow host.
++					console.error("island: error during unmount", e);
++				}
++				// Drops the shadow root and everything in it.
++				shadowHost.remove();
++			},
++		};
++
++		return handle;
++	}
++}
++
++function sharedStyleSheet(url) {
++	if (!styleSheets.has(url)) {
++		const sheet = fetch(url)
++			.then((response) => {
++				if (!response.ok) {
++					throw new Error(`island: cannot load ${url} (${response.status})`);
++				}
++				return response.text();
++			})
++			.then((css) => {
++				const sheet = new CSSStyleSheet();
++				sheet.replaceSync(css);
++				return sheet;
++			})
++			.catch((e) => {
++				// One failed fetch must not poison every later mount.
++				styleSheets.delete(url);
++				throw e;
++			});
++		styleSheets.set(url, sheet);
++	}
++	return styleSheets.get(url);
++}
+diff --git a/ui/island/theme.js b/ui/island/theme.js
+new file mode 100644
+index 0000000000..a49d8c1598
+--- /dev/null
++++ b/ui/island/theme.js
+@@ -0,0 +1,36 @@
++// The host page's live theme, shared by every island on it.
++//
++// Desk flips `data-theme` on <html> mid-session, from the theme switcher or from
++// the OS preference under "automatic". One observer serves all islands, because
++// each island is a separate Vue app and the attribute is one DOM node.
++
++const listeners = new Set();
++let observer = null;
++
++export function currentTheme() {
++	return document.documentElement.getAttribute("data-theme") || "light";
++}
++
++/** Runs `callback(theme)` on every host theme change. Returns an unsubscribe. */
++export function onThemeChange(callback) {
++	listeners.add(callback);
++
++	if (!observer) {
++		observer = new MutationObserver(() => {
++			const theme = currentTheme();
++			listeners.forEach((listener) => listener(theme));
++		});
++		observer.observe(document.documentElement, {
++			attributes: true,
++			attributeFilter: ["data-theme"],
++		});
++	}
++
++	return () => {
++		listeners.delete(callback);
++		if (!listeners.size && observer) {
++			observer.disconnect();
++			observer = null;
++		}
++	};
++}
+diff --git a/ui/package.json b/ui/package.json
+index 99de90dc2b..acada09b28 100644
+--- a/ui/package.json
++++ b/ui/package.json
+@@ -69,15 +69,26 @@
+       "import": "./src/utils/index.ts",
+       "types": "./src/utils/index.ts"
+     },
++    "./island": {
++      "import": "./island/index.js"
++    },
++    "./island/host": {
++      "import": "./island/host.js"
++    },
++    "./island/Island.vue": "./island/Island.vue",
+     "./vite": {
+       "import": "./vite/index.js"
+     },
++    "./vite/island": {
++      "import": "./vite/island/index.js"
++    },
+     "./*": {
+       "import": "./src/*"
+     }
+   },
+   "files": [
+     "src",
++    "island",
+     "vite"
+   ],
+   "repository": {
+diff --git a/ui/patches/reka-ui+2.10.1.patch b/ui/patches/reka-ui+2.10.1.patch
+new file mode 100644
+index 0000000000..e902e52387
+--- /dev/null
++++ b/ui/patches/reka-ui+2.10.1.patch
+@@ -0,0 +1,306 @@
++diff --git a/node_modules/reka-ui/dist/Combobox/ComboboxInput.cjs b/node_modules/reka-ui/dist/Combobox/ComboboxInput.cjs
++--- a/node_modules/reka-ui/dist/Combobox/ComboboxInput.cjs
+++++ b/node_modules/reka-ui/dist/Combobox/ComboboxInput.cjs
++@@ -79,12 +79,14 @@
++ 			if (!rootContext.open.value) return;
++ 			const nextFocus = ev.relatedTarget;
++ 			if (!nextFocus) return;
+++			// the tree the combobox lives in: its shadow root inside an island, the document elsewhere
+++			const root = rootContext.parentElement.value?.getRootNode?.() ?? document;
++ 			const isInsideRoot = rootContext.parentElement.value?.contains(nextFocus);
++-			const isInsideContent = document.getElementById(rootContext.contentId)?.contains(nextFocus);
+++			const isInsideContent = root.getElementById?.(rootContext.contentId)?.contains(nextFocus);
++ 			if (!isInsideRoot && !isInsideContent) requestAnimationFrame(() => {
++ 				if (!rootContext.open.value) return;
++-				const active = document.activeElement;
++-				const isStillOutside = !rootContext.parentElement.value?.contains(active) && !document.getElementById(rootContext.contentId)?.contains(active);
+++				const active = root.activeElement ?? document.activeElement;
+++				const isStillOutside = !rootContext.parentElement.value?.contains(active) && !root.getElementById?.(rootContext.contentId)?.contains(active);
++ 				if (isStillOutside) rootContext.onOpenChange(false);
++ 			});
++ 		}
++diff --git a/node_modules/reka-ui/dist/Combobox/ComboboxInput.js b/node_modules/reka-ui/dist/Combobox/ComboboxInput.js
++--- a/node_modules/reka-ui/dist/Combobox/ComboboxInput.js
+++++ b/node_modules/reka-ui/dist/Combobox/ComboboxInput.js
++@@ -78,12 +78,14 @@
++ 			if (!rootContext.open.value) return;
++ 			const nextFocus = ev.relatedTarget;
++ 			if (!nextFocus) return;
+++			// the tree the combobox lives in: its shadow root inside an island, the document elsewhere
+++			const root = rootContext.parentElement.value?.getRootNode?.() ?? document;
++ 			const isInsideRoot = rootContext.parentElement.value?.contains(nextFocus);
++-			const isInsideContent = document.getElementById(rootContext.contentId)?.contains(nextFocus);
+++			const isInsideContent = root.getElementById?.(rootContext.contentId)?.contains(nextFocus);
++ 			if (!isInsideRoot && !isInsideContent) requestAnimationFrame(() => {
++ 				if (!rootContext.open.value) return;
++-				const active = document.activeElement;
++-				const isStillOutside = !rootContext.parentElement.value?.contains(active) && !document.getElementById(rootContext.contentId)?.contains(active);
+++				const active = root.activeElement ?? document.activeElement;
+++				const isStillOutside = !rootContext.parentElement.value?.contains(active) && !root.getElementById?.(rootContext.contentId)?.contains(active);
++ 				if (isStillOutside) rootContext.onOpenChange(false);
++ 			});
++ 		}
++diff --git a/node_modules/reka-ui/dist/DismissableLayer/utils.cjs b/node_modules/reka-ui/dist/DismissableLayer/utils.cjs
++index 20b3e5b..d6fcf4f 100644
++--- a/node_modules/reka-ui/dist/DismissableLayer/utils.cjs
+++++ b/node_modules/reka-ui/dist/DismissableLayer/utils.cjs
++@@ -3,6 +3,44 @@ const require_shared_handleAndDispatchCustomEvent = require('../shared/handleAnd
++ const vue = require_rolldown_runtime.__toESM(require("vue"));
++ const __vueuse_shared = require_rolldown_runtime.__toESM(require("@vueuse/shared"));
++ 
+++//#region shadow-DOM roots (@framework/ui patch — unovue/reka-ui#1667)
+++/**
+++ * A layer inside an island's shadow root is invisible to a document-wide
+++ * query, and its events reach the document retargeted to the shadow host. So
+++ * a layer stacked over another one — a popover over a dialog — read as
+++ * outside it, and the click that opened the popover closed the dialog.
+++ *
+++ * The tree a layer lives in. `getRootNode()` answers the shadow root for a
+++ * layer inside one, and the document for every other layer, so nothing
+++ * changes outside an island.
+++ */
+++function layerRoot(element) {
+++	return element?.getRootNode?.() ?? globalThis?.document;
+++}
+++/**
+++ * Where a layer has to listen. A layer inside a shadow root hears its own
+++ * tree's events with the real target; the same event reaches the document
+++ * retargeted to the shadow host, which every check here reads as "outside".
+++ * Listen on both, so a click on the page outside the island still dismisses.
+++ */
+++function layerRoots(element) {
+++	const root = layerRoot(element);
+++	const doc = element?.ownerDocument ?? globalThis?.document;
+++	return root === doc ? [doc] : [root, doc];
+++}
+++/** The document's copy of an event the layer's own root already handled. */
+++function isRetargeted(element, event) {
+++	const root = layerRoot(element);
+++	return Boolean(root && root.host && event.target === root.host);
+++}
+++function addLayerListener(roots, type, handler, options) {
+++	for (const root of roots) root.addEventListener(type, handler, options);
+++}
+++function removeLayerListener(roots, type, handler) {
+++	for (const root of roots) root.removeEventListener(type, handler);
+++}
+++//#endregion
+++
++ //#region src/DismissableLayer/utils.ts
++ const POINTER_DOWN_OUTSIDE = "dismissableLayer.pointerDownOutside";
++ const FOCUS_OUTSIDE = "dismissableLayer.focusOutside";
++@@ -10,7 +48,7 @@ function isLayerExist(layerElement, targetElement) {
++ 	if (!(targetElement instanceof Element)) return false;
++ 	const targetLayer = targetElement.closest("[data-dismissable-layer]");
++ 	const mainLayer = layerElement.dataset.dismissableLayer === "" ? layerElement : layerElement.querySelector("[data-dismissable-layer]");
++-	const nodeList = Array.from(layerElement.ownerDocument.querySelectorAll("[data-dismissable-layer]"));
+++	const nodeList = Array.from(layerRoot(layerElement).querySelectorAll("[data-dismissable-layer]"));
++ 	if (targetLayer && (mainLayer === targetLayer || nodeList.indexOf(mainLayer) < nodeList.indexOf(targetLayer))) return true;
++ 	else return false;
++ }
++@@ -20,14 +58,15 @@ function isLayerExist(layerElement, targetElement) {
++ * Returns props to pass to the node we want to check for outside events.
++ */
++ function usePointerDownOutside(onPointerDownOutside, element, enabled = true) {
++-	const ownerDocument = element?.value?.ownerDocument ?? globalThis?.document;
++ 	const isPointerInsideDOMTree = (0, vue.ref)(false);
++ 	const handleClickRef = (0, vue.ref)(() => {});
++ 	(0, vue.watchEffect)((cleanupFn) => {
++ 		if (!__vueuse_shared.isClient || !(0, vue.toValue)(enabled)) return;
+++		const roots = layerRoots(element?.value);
++ 		const handlePointerDown = async (event) => {
++ 			const target = event.target;
++ 			if (!element?.value || !target) return;
+++			if (isRetargeted(element.value, event)) return;
++ 			if (isLayerExist(element.value, target)) {
++ 				isPointerInsideDOMTree.value = false;
++ 				return;
++@@ -50,11 +89,11 @@ function usePointerDownOutside(onPointerDownOutside, element, enabled = true) {
++ 				* certain that it was raised, and therefore cleaned-up.
++ 				*/
++ 				if (event.pointerType === "touch") {
++-					ownerDocument.removeEventListener("click", handleClickRef.value);
+++					removeLayerListener(roots, "click", handleClickRef.value);
++ 					handleClickRef.value = handleAndDispatchPointerDownOutsideEvent;
++-					ownerDocument.addEventListener("click", handleClickRef.value, { once: true });
+++					addLayerListener(roots, "click", handleClickRef.value, { once: true });
++ 				} else handleAndDispatchPointerDownOutsideEvent();
++-			} else ownerDocument.removeEventListener("click", handleClickRef.value);
+++			} else removeLayerListener(roots, "click", handleClickRef.value);
++ 			isPointerInsideDOMTree.value = false;
++ 		};
++ 		/**
++@@ -71,12 +110,12 @@ function usePointerDownOutside(onPointerDownOutside, element, enabled = true) {
++ 		* });
++ 		*/
++ 		const timerId = window.setTimeout(() => {
++-			ownerDocument.addEventListener("pointerdown", handlePointerDown);
+++			addLayerListener(roots, "pointerdown", handlePointerDown);
++ 		}, 0);
++ 		cleanupFn(() => {
++ 			window.clearTimeout(timerId);
++-			ownerDocument.removeEventListener("pointerdown", handlePointerDown);
++-			ownerDocument.removeEventListener("click", handleClickRef.value);
+++			removeLayerListener(roots, "pointerdown", handlePointerDown);
+++			removeLayerListener(roots, "click", handleClickRef.value);
++ 		});
++ 	});
++ 	return { onPointerDownCapture: () => {
++@@ -89,12 +128,13 @@ function usePointerDownOutside(onPointerDownOutside, element, enabled = true) {
++ * Returns props to pass to the root (node) of the subtree we want to check.
++ */
++ function useFocusOutside(onFocusOutside, element, enabled = true) {
++-	const ownerDocument = element?.value?.ownerDocument ?? globalThis?.document;
++ 	const isFocusInsideDOMTree = (0, vue.ref)(false);
++ 	(0, vue.watchEffect)((cleanupFn) => {
++ 		if (!__vueuse_shared.isClient || !(0, vue.toValue)(enabled)) return;
+++		const roots = layerRoots(element?.value);
++ 		const handleFocus = async (event) => {
++ 			if (!element?.value) return;
+++			if (isRetargeted(element.value, event)) return;
++ 			await (0, vue.nextTick)();
++ 			await (0, vue.nextTick)();
++ 			const target = event.target;
++@@ -104,8 +144,8 @@ function useFocusOutside(onFocusOutside, element, enabled = true) {
++ 				require_shared_handleAndDispatchCustomEvent.handleAndDispatchCustomEvent(FOCUS_OUTSIDE, onFocusOutside, eventDetail);
++ 			}
++ 		};
++-		ownerDocument.addEventListener("focusin", handleFocus);
++-		cleanupFn(() => ownerDocument.removeEventListener("focusin", handleFocus));
+++		addLayerListener(roots, "focusin", handleFocus);
+++		cleanupFn(() => removeLayerListener(roots, "focusin", handleFocus));
++ 	});
++ 	return {
++ 		onFocusCapture: () => {
++diff --git a/node_modules/reka-ui/dist/DismissableLayer/utils.js b/node_modules/reka-ui/dist/DismissableLayer/utils.js
++index 12df254..b707d6c 100644
++--- a/node_modules/reka-ui/dist/DismissableLayer/utils.js
+++++ b/node_modules/reka-ui/dist/DismissableLayer/utils.js
++@@ -2,6 +2,44 @@ import { handleAndDispatchCustomEvent } from "../shared/handleAndDispatchCustomE
++ import { nextTick, ref, toValue, watchEffect } from "vue";
++ import { isClient } from "@vueuse/shared";
++ 
+++//#region shadow-DOM roots (@framework/ui patch — unovue/reka-ui#1667)
+++/**
+++ * A layer inside an island's shadow root is invisible to a document-wide
+++ * query, and its events reach the document retargeted to the shadow host. So
+++ * a layer stacked over another one — a popover over a dialog — read as
+++ * outside it, and the click that opened the popover closed the dialog.
+++ *
+++ * The tree a layer lives in. `getRootNode()` answers the shadow root for a
+++ * layer inside one, and the document for every other layer, so nothing
+++ * changes outside an island.
+++ */
+++function layerRoot(element) {
+++	return element?.getRootNode?.() ?? globalThis?.document;
+++}
+++/**
+++ * Where a layer has to listen. A layer inside a shadow root hears its own
+++ * tree's events with the real target; the same event reaches the document
+++ * retargeted to the shadow host, which every check here reads as "outside".
+++ * Listen on both, so a click on the page outside the island still dismisses.
+++ */
+++function layerRoots(element) {
+++	const root = layerRoot(element);
+++	const doc = element?.ownerDocument ?? globalThis?.document;
+++	return root === doc ? [doc] : [root, doc];
+++}
+++/** The document's copy of an event the layer's own root already handled. */
+++function isRetargeted(element, event) {
+++	const root = layerRoot(element);
+++	return Boolean(root && root.host && event.target === root.host);
+++}
+++function addLayerListener(roots, type, handler, options) {
+++	for (const root of roots) root.addEventListener(type, handler, options);
+++}
+++function removeLayerListener(roots, type, handler) {
+++	for (const root of roots) root.removeEventListener(type, handler);
+++}
+++//#endregion
+++
++ //#region src/DismissableLayer/utils.ts
++ const POINTER_DOWN_OUTSIDE = "dismissableLayer.pointerDownOutside";
++ const FOCUS_OUTSIDE = "dismissableLayer.focusOutside";
++@@ -9,7 +47,7 @@ function isLayerExist(layerElement, targetElement) {
++ 	if (!(targetElement instanceof Element)) return false;
++ 	const targetLayer = targetElement.closest("[data-dismissable-layer]");
++ 	const mainLayer = layerElement.dataset.dismissableLayer === "" ? layerElement : layerElement.querySelector("[data-dismissable-layer]");
++-	const nodeList = Array.from(layerElement.ownerDocument.querySelectorAll("[data-dismissable-layer]"));
+++	const nodeList = Array.from(layerRoot(layerElement).querySelectorAll("[data-dismissable-layer]"));
++ 	if (targetLayer && (mainLayer === targetLayer || nodeList.indexOf(mainLayer) < nodeList.indexOf(targetLayer))) return true;
++ 	else return false;
++ }
++@@ -19,14 +57,15 @@ function isLayerExist(layerElement, targetElement) {
++ * Returns props to pass to the node we want to check for outside events.
++ */
++ function usePointerDownOutside(onPointerDownOutside, element, enabled = true) {
++-	const ownerDocument = element?.value?.ownerDocument ?? globalThis?.document;
++ 	const isPointerInsideDOMTree = ref(false);
++ 	const handleClickRef = ref(() => {});
++ 	watchEffect((cleanupFn) => {
++ 		if (!isClient || !toValue(enabled)) return;
+++		const roots = layerRoots(element?.value);
++ 		const handlePointerDown = async (event) => {
++ 			const target = event.target;
++ 			if (!element?.value || !target) return;
+++			if (isRetargeted(element.value, event)) return;
++ 			if (isLayerExist(element.value, target)) {
++ 				isPointerInsideDOMTree.value = false;
++ 				return;
++@@ -49,11 +88,11 @@ function usePointerDownOutside(onPointerDownOutside, element, enabled = true) {
++ 				* certain that it was raised, and therefore cleaned-up.
++ 				*/
++ 				if (event.pointerType === "touch") {
++-					ownerDocument.removeEventListener("click", handleClickRef.value);
+++					removeLayerListener(roots, "click", handleClickRef.value);
++ 					handleClickRef.value = handleAndDispatchPointerDownOutsideEvent;
++-					ownerDocument.addEventListener("click", handleClickRef.value, { once: true });
+++					addLayerListener(roots, "click", handleClickRef.value, { once: true });
++ 				} else handleAndDispatchPointerDownOutsideEvent();
++-			} else ownerDocument.removeEventListener("click", handleClickRef.value);
+++			} else removeLayerListener(roots, "click", handleClickRef.value);
++ 			isPointerInsideDOMTree.value = false;
++ 		};
++ 		/**
++@@ -70,12 +109,12 @@ function usePointerDownOutside(onPointerDownOutside, element, enabled = true) {
++ 		* });
++ 		*/
++ 		const timerId = window.setTimeout(() => {
++-			ownerDocument.addEventListener("pointerdown", handlePointerDown);
+++			addLayerListener(roots, "pointerdown", handlePointerDown);
++ 		}, 0);
++ 		cleanupFn(() => {
++ 			window.clearTimeout(timerId);
++-			ownerDocument.removeEventListener("pointerdown", handlePointerDown);
++-			ownerDocument.removeEventListener("click", handleClickRef.value);
+++			removeLayerListener(roots, "pointerdown", handlePointerDown);
+++			removeLayerListener(roots, "click", handleClickRef.value);
++ 		});
++ 	});
++ 	return { onPointerDownCapture: () => {
++@@ -88,12 +127,13 @@ function usePointerDownOutside(onPointerDownOutside, element, enabled = true) {
++ * Returns props to pass to the root (node) of the subtree we want to check.
++ */
++ function useFocusOutside(onFocusOutside, element, enabled = true) {
++-	const ownerDocument = element?.value?.ownerDocument ?? globalThis?.document;
++ 	const isFocusInsideDOMTree = ref(false);
++ 	watchEffect((cleanupFn) => {
++ 		if (!isClient || !toValue(enabled)) return;
+++		const roots = layerRoots(element?.value);
++ 		const handleFocus = async (event) => {
++ 			if (!element?.value) return;
+++			if (isRetargeted(element.value, event)) return;
++ 			await nextTick();
++ 			await nextTick();
++ 			const target = event.target;
++@@ -103,8 +143,8 @@ function useFocusOutside(onFocusOutside, element, enabled = true) {
++ 				handleAndDispatchCustomEvent(FOCUS_OUTSIDE, onFocusOutside, eventDetail);
++ 			}
++ 		};
++-		ownerDocument.addEventListener("focusin", handleFocus);
++-		cleanupFn(() => ownerDocument.removeEventListener("focusin", handleFocus));
+++		addLayerListener(roots, "focusin", handleFocus);
+++		cleanupFn(() => removeLayerListener(roots, "focusin", handleFocus));
++ 	});
++ 	return {
++ 		onFocusCapture: () => {
+diff --git a/ui/vite/island/assets.js b/ui/vite/island/assets.js
+new file mode 100644
+index 0000000000..a5722c3603
+--- /dev/null
++++ b/ui/vite/island/assets.js
+@@ -0,0 +1,204 @@
++// Bench paths and assets.json registration for the island build. Registration
++// merges into the file, rewrites only the keys this build owns, and drops the
++// Redis copy so Python re-reads the file.
++
++import fs from "node:fs";
++import path from "node:path";
++import { createRequire } from "node:module";
++
++const { update_assets_json } = createRequire(import.meta.url)("../../../esbuild/assets_json.js");
++
++/** Suffixes that make an island key unmistakable to the module loader. */
++export const ISLAND_JS_SUFFIX = ".island.js";
++export const ISLAND_CSS_SUFFIX = ".island.css";
++
++/** Where an app's islands live under its dist directory. */
++export const ISLAND_DIST_SUBDIR = "island";
++
++export const islandJsKey = (name) => `${name}${ISLAND_JS_SUFFIX}`;
++export const islandCssKey = (name) => `${name}${ISLAND_CSS_SUFFIX}`;
++
++/**
++ * The bench root: the directory holding `sites/` and `apps/`. The preset always
++ * runs inside a bench, so it discovers the root instead of taking it as an
++ * option. `FRAPPE_BENCH_ROOT` overrides the walk, the same escape hatch frappe's
++ * own esbuild/utils.js honors.
++ *
++ * @param {string} from  Directory to start walking up from (the vite root).
++ */
++export function findBenchRoot(from) {
++	if (process.env.FRAPPE_BENCH_ROOT) return path.resolve(process.env.FRAPPE_BENCH_ROOT);
++
++	let dir = path.resolve(from);
++	for (;;) {
++		if (fs.existsSync(path.join(dir, "sites")) && fs.existsSync(path.join(dir, "apps")))
++			return dir;
++		const parent = path.dirname(dir);
++		if (parent === dir)
++			throw new Error(
++				`island: no bench root above ${from} (looked for a directory with ` +
++					"sites/ and apps/). Set FRAPPE_BENCH_ROOT to point at one."
++			);
++		dir = parent;
++	}
++}
++
++/**
++ * Every path the build writes to or reads from, derived from one bench root.
++ *
++ * `subdir` names the output directory under the app's dist. A build owns every
++ * assets.json key pointing into its own directory, so two builds that write for
++ * the same app need two directories or they drop each other's keys. The
++ * framework page-island build passes its own.
++ */
++export function benchPaths(benchRoot, app, subdir = ISLAND_DIST_SUBDIR) {
++	const sitesPath = path.join(benchRoot, "sites");
++	const assetsPath = path.join(sitesPath, "assets");
++	return {
++		benchRoot,
++		sitesPath,
++		assetsPath,
++		assetsJsonPath: path.join(assetsPath, "assets.json"),
++		distDir: path.join(assetsPath, app, "dist", subdir),
++		urlPrefix: path.posix.join("/", "assets", app, "dist", subdir),
++	};
++}
++
++/**
++ * Register an app's built islands in assets.json.
++ *
++ * The app's island build owns every key that points into its own output
++ * directory, and each build rewrites that whole set. An entry the app
++ * dropped loses its keys in the same build, instead of leaving dangling ones
++ * behind. This leaves the keys of other apps and of the legacy pipeline
++ * untouched.
++ *
++ * A key another build already owns is an error. An island's name is its key, so
++ * two builds writing one key are two islands claiming one name, and whichever
++ * ran last would draw for both.
++ *
++ * @param {Object} paths        from `benchPaths`
++ * @param {Object<string,string>} relMap  asset key → path relative to the app's
++ *                                        island output directory
++ * @returns {Promise<Object<string,string>>}  asset key → public URL
++ */
++export async function writeIslandAssets(paths, relMap) {
++	const ownPrefix = `${paths.urlPrefix}/`;
++	await fs.promises.mkdir(path.dirname(paths.assetsJsonPath), {
++		recursive: true,
++	});
++	const written = Object.fromEntries(
++		Object.entries(relMap).map(([key, rel]) => [
++			key,
++			path.posix.join(ownPrefix, rel.split(path.sep).join("/")),
++		])
++	);
++
++	await update_assets_json(paths.assetsJsonPath, (existing) => {
++		const kept = Object.fromEntries(
++			Object.entries(existing).filter(([, url]) => !url.startsWith(ownPrefix))
++		);
++		const taken = Object.keys(written).filter((key) => key in kept);
++		if (taken.length)
++			throw new Error(
++				"island: a build elsewhere on this bench already registers " +
++					taken.map((key) => `"${key}" (${kept[key]})`).join(", ") +
++					".\nAn island name is one bench-wide namespace. Rename the entry."
++			);
++		return { ...kept, ...written };
++	});
++	await invalidateAssetsCache(paths);
++	return written;
++}
++
++/**
++ * Drop the Redis copy of assets.json, so the next page render sees the new
++ * hashes. The connection details live in the site config, so this calls frappe's
++ * own helper instead of deriving them again. A tree without frappe, such as a
++ * test fixture, skips this step.
++ */
++async function invalidateAssetsCache(paths) {
++	if (process.env.FRAPPE_DOCKER_BUILD) return;
++	const utils = loadFrappeBuildUtils(paths.benchRoot);
++	if (!utils) return;
++
++	let client;
++	try {
++		client = utils.get_redis_subscriber("redis_cache");
++		await client.connect();
++		await client.del("assets_json");
++	} catch {
++		console.warn("[island] cannot reach redis_cache to invalidate assets_json");
++	} finally {
++		// Close the client. Vite exits on its own, unlike esbuild.js, which
++		// calls process.exit(). A failed connect leaves the client open but
++		// not ready, where a QUIT never settles.
++		try {
++			if (client?.isReady) await client.quit();
++			else if (client?.isOpen) await client.disconnect();
++		} catch {
++			// already closed
++		}
++	}
++}
++
++/**
++ * Frappe's own node build helpers, from the bench this build runs in. They hold
++ * the redis connection details and the app list, both of which live in the site
++ * config. A tree without frappe, such as a test fixture, gets `null`.
++ */
++export function loadFrappeBuildUtils(benchRoot) {
++	const utilsPath = path.join(benchRoot, "apps/frappe/esbuild/utils.js");
++	if (!fs.existsSync(utilsPath)) return null;
++	try {
++		return createRequire(import.meta.url)(utilsPath);
++	} catch {
++		return null;
++	}
++}
++
++/**
++ * Announce a finished (re)build.
++ *
++ * Under watch this publishes frappe's `build_event` on the `events` Redis
++ * channel, the same message the esbuild watcher sends. Desk refetches
++ * assets.json and runs its `hot_update` callbacks, one of which re-mounts every
++ * island whose URL moved. A reload is not needed and not asked for:
++ * `live_reload` stays unset, or the page would reload out from under the island
++ * this exists to keep.
++ *
++ * A one-off build says nothing. The esbuild pipeline publishes for that run
++ * already, and a second message is a second toast for one build.
++ */
++export async function notifyRebuild(paths, urls, watching) {
++	for (const [key, url] of Object.entries(urls)) console.log(`[island] ${key} → ${url}`);
++	if (!watching) return;
++
++	const utils = loadFrappeBuildUtils(paths.benchRoot);
++	if (!utils) return;
++
++	let client;
++	try {
++		client = utils.get_redis_subscriber("redis_queue");
++		await client.connect();
++		await client.publish(
++			"events",
++			JSON.stringify({
++				event: "build_event",
++				message: { success: true, changed_files: Object.values(urls) },
++			})
++		);
++	} catch {
++		console.warn("[island] cannot reach redis_queue to announce the rebuild");
++	} finally {
++		try {
++			await client?.quit();
++		} catch {
++			try {
++				await client?.disconnect();
++			} catch {
++				// never connected
++			}
++		}
++	}
++}
+diff --git a/ui/vite/island/desk-fonts.js b/ui/vite/island/desk-fonts.js
+new file mode 100644
+index 0000000000..80889382d7
+--- /dev/null
++++ b/ui/vite/island/desk-fonts.js
+@@ -0,0 +1,24 @@
++// PostCSS plugin. It asks for the font families the host page registers.
++//
++// An island never loads frappe-ui's font stylesheet, so `InterVar` matches no
++// registered face and the island renders in the system font. Desk registers the
++// same typeface as `InterVariable` and `Inter`. `@font-face` is document-scoped,
++// so those faces already reach the shadow tree. Only the name needs a rewrite.
++
++/** Optionally quoted, and not the leading half of `InterVariable`. */
++const FRAPPE_UI_FONT = /(["']?)InterVar\1(?![\w-])/g;
++
++/** Variable file first, static weights as the fallback desk also registers. */
++const DESK_FONTS = "InterVariable, Inter";
++
++/** @type {import('postcss').Plugin} */
++const deskFonts = {
++	postcssPlugin: "island-desk-fonts",
++	Declaration(decl) {
++		if (!/font/i.test(decl.prop) || typeof decl.value !== "string") return;
++		FRAPPE_UI_FONT.lastIndex = 0;
++		decl.value = decl.value.replace(FRAPPE_UI_FONT, DESK_FONTS);
++	},
++};
++
++export default deskFonts;
+diff --git a/ui/vite/island/index.js b/ui/vite/island/index.js
+new file mode 100644
+index 0000000000..313c15081e
+--- /dev/null
++++ b/ui/vite/island/index.js
+@@ -0,0 +1,445 @@
++// The island build preset. It sets everything the mount contract depends on, so
++// an app supplies only its entry list. Usage and options in ../../README.md.
++//
++// The preset runs one Vite build for all of an app's islands. Rollup then lifts
++// what two entries share into a chunk both import. The app pays for Vue and
++// frappe-ui once, whatever the island count.
++// ../../island/decisions/0002-an-app-builds-its-islands-together.md
++//
++// Three jobs remain. The preset scans the app's stylesheet from what the bundle
++// is made of. It weighs each island against a budget. It registers the built
++// files under the asset keys the desk loader resolves.
++
++import fs from "node:fs";
++import path from "node:path";
++import zlib from "node:zlib";
++
++import frameworkUI from "../index.js";
++import {
++	benchPaths,
++	findBenchRoot,
++	islandCssKey,
++	islandJsKey,
++	notifyRebuild,
++	writeIslandAssets,
++} from "./assets.js";
++import deskFonts from "./desk-fonts.js";
++import { writeInputsStamp } from "./inputs.js";
++import rootToHost from "./root-to-host.js";
++import { bundleSources, unscannedSources } from "./tailwind-scan.js";
++import { writeIslandTailwindConfig } from "./tailwind.js";
++import { interop, loadTools } from "./tools.js";
++import { islandVue } from "./vue.js";
++
++/**
++ * Bytes of JS plus CSS one island may load, before compression.
++ *
++ * This is a backstop, not a target. An island carries its own Vue, its own
++ * frappe-ui and its own preflight, so the floor is high. Measured:
++ *
++ * - the fixture in `tests/`, one frappe-ui Button: 288 kB
++ * - the Insights dashboard island, a grid of live charts: 1.78 MB
++ * - an entry that reached into the Insights SPA's router graph: 2.3 MB of JS
++ *
++ * The default sits above the working islands and below that failure. An app
++ * pins `budget` to its own first clean build, where the number is meaningful.
++ */
++export const DEFAULT_BUDGET = 2 * 1024 * 1024;
++
++/** The CSS module every entry gets, holding the Tailwind directives. */
++const TAILWIND_ENTRY = "virtual:island.css";
++
++/**
++ * Build every island of an app.
++ *
++ * @param {Object} options
++ * @param {string} options.app       frappe app the output belongs to, e.g. `insights`
++ * @param {string} options.root      the app's frontend directory (the vite root)
++ * @param {Object<string,string>} options.entries  bundle name → entry file
++ * @param {string} [options.subdir]  output directory under the app's dist. One
++ *        build owns everything under it, so a second build writing for the same
++ *        app passes its own. Defaults to `island`
++ * @param {number} [options.budget]  bytes of JS + CSS one island may load. Over it, the build warns
++ * @param {string[]} [options.tailwindPlugins]  the app's Tailwind plugins, by module specifier
++ * @param {(string|RegExp)[]} [options.allowUnscanned]  bundled files that hold no
++ *        classes, so the scan check passes over them
++ * @param {(string|RegExp)[]} [options.forbiddenImports]  fail the build on a matching import
++ * @param {import('vite').PluginOption[]} [options.plugins]  extra plugins
++ * @param {boolean} [options.production]
++ * @param {boolean} [options.watch]
++ * @param {boolean} [options.stampInputs]  record the build's inputs beside its
++ *        output, for `islandsUnchanged` in ./inputs.js
++ */
++export async function buildIslands(options) {
++	const context = await islandContext(options);
++	const names = Object.keys(context.entries);
++
++	console.log(
++		`[island] building ${names.length} island(s) for ${context.app} ` +
++			`[mode=${context.mode}${context.watch ? ", watch" : ""}]`
++	);
++
++	const scanned = await discoverSources(context);
++	const tailwind = writeIslandTailwindConfig(context, scanned);
++
++	const result = await context.tools.vite.build(
++		islandConfig({ ...context, tailwind, scanned: new Set(scanned) })
++	);
++
++	if (context.watch && typeof result?.on === "function")
++		result.on("event", (event) => {
++			if (event.code === "ERROR") console.error("[island]", event.error?.message);
++		});
++}
++
++/**
++ * The source the app's islands are built from, for Tailwind to scan.
++ *
++ * The preset runs a first build with no stylesheet, keeps its module list, and
++ * discards the output. That pass costs about the time of the real build.
++ * ../../island/decisions/0003-tailwind-scans-the-module-list-not-a-glob.md
++ */
++async function discoverSources(context) {
++	const modules = new Set();
++
++	const config = islandConfig({ ...context, tailwind: null });
++	config.logLevel = "silent";
++	config.build.write = false;
++	config.build.watch = null;
++	config.plugins = config.plugins
++		.filter((plugin) => plugin?.name !== "island-emit")
++		.concat({
++			name: "island-discover",
++			generateBundle(_options, bundle) {
++				for (const node of Object.values(bundle))
++					if (node.type === "chunk")
++						for (const id of Object.keys(node.modules)) modules.add(id);
++			},
++		});
++
++	await context.tools.vite.build(config);
++	return bundleSources(modules);
++}
++
++/** Everything the config is derived from, resolved once. */
++export async function islandContext(options) {
++	if (!options.app) throw new Error("island: `app` is required");
++	if (!options.root) throw new Error("island: `root` is required");
++	if (!Object.keys(options.entries ?? {}).length) throw new Error("island: no entries to build");
++
++	// Vite reports module ids as real paths. A root reached through a symlink
++	// would never match the entry it resolves to.
++	const root = fs.realpathSync(path.resolve(options.root));
++
++	const entries = Object.fromEntries(
++		Object.entries(options.entries).map(([name, file]) => {
++			if (!/^[\w.-]+$/.test(name))
++				throw new Error(
++					`island: entry name "${name}" must be a bare word. It becomes ` +
++						"an assets.json key and an output file name."
++				);
++			return [name, fs.realpathSync(path.resolve(root, file))];
++		})
++	);
++
++	return {
++		...options,
++		root,
++		entries,
++		paths: benchPaths(findBenchRoot(root), options.app, options.subdir),
++		mode: options.production ? "production" : "development",
++		budget: options.budget ?? DEFAULT_BUDGET,
++		tools: await loadTools(root),
++	};
++}
++
++/** The one vite config that builds all of an app's islands. */
++export function islandConfig(context) {
++	const { tools } = context;
++	const entryPaths = new Set(Object.values(context.entries));
++
++	return {
++		root: context.root,
++		base: `${context.paths.urlPrefix}/`,
++		configFile: false,
++		envFile: false,
++		publicDir: false,
++		mode: context.mode,
++		logLevel: "warn",
++		define: {
++			__VUE_OPTIONS_API__: "true",
++			__VUE_PROD_DEVTOOLS__: "false",
++			__VUE_PROD_HYDRATION_MISMATCH_DETAILS__: "false",
++		},
++		css: {
++			postcss: {
++				// The discovery pass gets no Tailwind config. It runs to
++				// produce the module list the config needs.
++				plugins: [
++					...(context.tailwind ? [interop(tools.tailwindcss)(context.tailwind)] : []),
++					interop(tools.autoprefixer),
++					rootToHost,
++					deskFonts,
++				],
++			},
++		},
++		plugins: [
++			// The mount contract is `@framework/ui` source the app compiles in
++			// place, so its own bare imports resolve against the app.
++			...frameworkUI(),
++			// `pre`, so this plugin claims `~icons/lucide/<name>` first.
++			{ ...tools.lucideIcons.lucideIconsPlugin(), enforce: "pre" },
++			tailwindEntry(entryPaths),
++			...(context.forbiddenImports?.length
++				? [forbiddenImports(context.forbiddenImports)]
++				: []),
++			islandVue(interop(tools.vue)),
++			hoistTransitiveImports(),
++			emitIslands(context),
++			...(context.plugins ?? []),
++		],
++		build: {
++			outDir: context.paths.distDir,
++			// The app's islands own this directory, so emptying it cannot touch
++			// the legacy pipeline's output or another app's islands. An entry
++			// the app dropped leaves in the same build.
++			emptyOutDir: true,
++			minify: context.mode === "production",
++			sourcemap: false,
++			// One stylesheet for the app, adopted into every island's shadow
++			// root. ../../island/decisions/0004-an-app-ships-one-island-stylesheet.md
++			cssCodeSplit: false,
++			modulePreload: false,
++			reportCompressedSize: false,
++			target: "esnext",
++			rollupOptions: {
++				input: context.entries,
++				// Desk imports an island for its `mount` export. Without this
++				// flag Vite treats each entry as an app entry, drops its
++				// exports, and tree-shakes the island away.
++				preserveEntrySignatures: "exports-only",
++				output: {
++					format: "es",
++					entryFileNames: "[name].island.[hash].js",
++					chunkFileNames: "chunks/[name].[hash].js",
++					// Rollup 4 reports `names`, and Vite's extracted
++					// stylesheet arrives with `name` alone.
++					assetFileNames: (asset) =>
++						(asset.names?.[0] ?? asset.name ?? "").endsWith(".css")
++							? `${context.app}.island.[hash][extname]`
++							: "assets/[name].[hash][extname]",
++				},
++			},
++			watch: context.watch ? {} : null,
++		},
++	};
++}
++
++/**
++ * Give every entry the app's stylesheet. The preset owns what an island sheet
++ * holds, so it injects the directives instead of the app writing them.
++ *
++ * All entries import the same virtual module, and `cssCodeSplit: false` collects
++ * the build's CSS into one file, so the directives are compiled once.
++ */
++function tailwindEntry(entryPaths) {
++	return {
++		name: "island-tailwind-entry",
++		enforce: "pre",
++		resolveId(source) {
++			return source === TAILWIND_ENTRY ? TAILWIND_ENTRY : null;
++		},
++		load(id) {
++			return id === TAILWIND_ENTRY
++				? "@tailwind base;\n@tailwind components;\n@tailwind utilities;\n"
++				: null;
++		},
++		transform(code, id) {
++			if (!entryPaths.has(id.split("?")[0])) return null;
++			return { code: `import "${TAILWIND_ENTRY}";\n${code}`, map: null };
++		},
++	};
++}
++
++/**
++ * Give every entry a static import of each chunk it loads, as Rollup's
++ * `hoistTransitiveImports` did. Rolldown has no such option. Without it the
++ * browser finds a chunk's own imports only after that chunk arrives, one round
++ * trip per level. Vite's `modulePreload` covers only HTML and dynamic imports.
++ *
++ * The imports go last, so every chunk still runs from its real importer first,
++ * in the same order as before.
++ */
++function hoistTransitiveImports() {
++	return {
++		name: "island-hoist-transitive-imports",
++		// Before hashing, so the entry's hash covers the imports added here.
++		// The file names are still placeholders, which the bundler fills in.
++		renderChunk(code, chunk, _options, { chunks }) {
++			if (!chunk.isEntry) return null;
++
++			const direct = new Set(chunk.imports);
++			const seen = new Set();
++			const queue = [...chunk.imports];
++			while (queue.length) {
++				const fileName = queue.pop();
++				if (seen.has(fileName)) continue;
++				seen.add(fileName);
++				queue.push(...(chunks[fileName]?.imports ?? []));
++			}
++
++			const hoisted = [...seen].filter((fileName) => !direct.has(fileName));
++			if (!hoisted.length) return null;
++
++			const from = path.posix.dirname(chunk.fileName);
++			return (
++				code +
++				hoisted
++					.map((fileName) => `\nimport "./${path.posix.relative(from, fileName)}";`)
++					.join("")
++			);
++		},
++	};
++}
++
++/** Optional and app-local. Refuses an import the app decided not to allow. */
++function forbiddenImports(patterns) {
++	const matches = (source) =>
++		patterns.some((pattern) =>
++			pattern instanceof RegExp ? pattern.test(source) : source === pattern
++		);
++
++	return {
++		name: "island-forbidden-imports",
++		enforce: "pre",
++		resolveId(source, importer) {
++			if (matches(source))
++				this.error(
++					`island: ${source} is a forbidden import` +
++						(importer ? ` (from ${importer})` : "")
++				);
++			return null;
++		},
++	};
++}
++
++/**
++ * Weigh each island, check it against the budget and the stylesheet, then
++ * register the whole app's islands in assets.json.
++ *
++ * All of it sits in one `writeBundle` hook. It is the only hook a watcher
++ * replays, and the first one that sees the stylesheet, because Vite's css-post
++ * plugin emits it after every user `generateBundle`. Rollup runs `writeBundle`
++ * hooks in parallel, so a separate gate plugin could not run before this one.
++ */
++function emitIslands(context) {
++	const { budget, paths } = context;
++
++	return {
++		name: "island-emit",
++		async writeBundle(_options, bundle) {
++			const css = Object.values(bundle).find((node) => node.fileName.endsWith(".css"));
++			const style = css ? measure(css.source) : { raw: 0, gzip: 0 };
++
++			const relMap = {};
++			for (const [name, entry] of entryChunks(bundle)) {
++				const js = sum(reachable(bundle, entry.fileName).map((n) => measure(n.code)));
++				console.log(`[island] ${name}: ${report(js)} JS, ${report(style)} CSS`);
++
++				// A warning, not an error. The budget is a number an app tunes as its
++				// island grows. A build that stops leaves the island's assets on disk
++				// with no `assets.json` entry, which is a broken island, for a size the
++				// app may accept. `forbiddenImports` is the check that fails the build,
++				// because it names a coupling instead of measuring one.
++				if (js.raw + style.raw > budget)
++					this.warn(
++						`island ${name} loads ${kb(js.raw + style.raw)} of JS + CSS, ` +
++							`over the ${kb(budget)} budget. An entry this size ` +
++							"pulls in something it should not. Check the entry's " +
++							"import graph, or raise `budget` deliberately."
++					);
++
++				relMap[islandJsKey(name)] = entry.fileName;
++				if (css) relMap[islandCssKey(name)] = css.fileName;
++			}
++
++			assertSheetScannedTheBundle(context, bundle, this);
++			const urls = await writeIslandAssets(paths, relMap);
++			if (context.stampInputs) writeInputsStamp(context, this.getModuleIds(), urls);
++			await notifyRebuild(paths, urls, context.watch);
++		},
++	};
++}
++
++/** Entry name → its chunk. Rollup names an entry chunk after its input key. */
++function entryChunks(bundle) {
++	return Object.values(bundle)
++		.filter((node) => node.type === "chunk" && node.isEntry)
++		.map((chunk) => [chunk.name, chunk]);
++}
++
++/**
++ * Every chunk the browser loads to run one entry.
++ *
++ * Static imports only. A dynamic import is work the island deferred, and
++ * charging the entry for it would leave an island no way to defer anything.
++ */
++function reachable(bundle, entryFileName) {
++	const seen = new Set();
++	const queue = [entryFileName];
++
++	while (queue.length) {
++		const fileName = queue.pop();
++		if (seen.has(fileName)) continue;
++		const node = bundle[fileName];
++		if (node?.type !== "chunk") continue;
++		seen.add(fileName);
++		queue.push(...node.imports);
++	}
++
++	return [...seen].map((fileName) => bundle[fileName]);
++}
++
++/**
++ * Refuse a bundle built from source the stylesheet never read.
++ *
++ * A full build derives the scan list from the module list, so this check fires
++ * only under `watch`. There the scan list is fixed at start-up.
++ * ../../island/decisions/0003-tailwind-scans-the-module-list-not-a-glob.md
++ */
++function assertSheetScannedTheBundle(context, bundle, plugin) {
++	const modules = new Set();
++	for (const node of Object.values(bundle))
++		if (node.type === "chunk") for (const id of Object.keys(node.modules)) modules.add(id);
++
++	const unscanned = unscannedSources({
++		modules,
++		scanned: context.scanned,
++		allowUnscanned: context.allowUnscanned ?? [],
++	});
++	if (!unscanned.length) return;
++
++	const relative = unscanned.map((file) => path.relative(context.root, file));
++	plugin.error(
++		`the island stylesheet was not scanned from ${relative.length} file(s) ` +
++			`the bundle is built from:\n  ${relative.join("\n  ")}\n` +
++			"A Tailwind class written in one of these gets no rule, and no " +
++			"other check reports it. Restart the build to scan them."
++	);
++}
++
++/* --------------------------------------------------------------- measuring */
++
++function measure(source) {
++	const buffer = Buffer.isBuffer(source) ? source : Buffer.from(source);
++	return { raw: buffer.length, gzip: zlib.gzipSync(buffer, { level: 9 }).length };
++}
++
++const sum = (sizes) =>
++	sizes.reduce((a, b) => ({ raw: a.raw + b.raw, gzip: a.gzip + b.gzip }), {
++		raw: 0,
++		gzip: 0,
++	});
++
++const kb = (bytes) => `${(bytes / 1024).toFixed(1)} kB`;
++const report = ({ raw, gzip }) => `${kb(raw)} raw / ${kb(gzip)} gzip`;
+diff --git a/ui/vite/island/inputs.js b/ui/vite/island/inputs.js
+new file mode 100644
+index 0000000000..162fc45112
+--- /dev/null
++++ b/ui/vite/island/inputs.js
+@@ -0,0 +1,204 @@
++// What an island build was made from, so a later build with the same inputs can
++// reuse its output instead of compiling it again.
++//
++// The key covers the entries, the mode, the options that reach the output, the
++// toolchain's lockfile, the preset's own source, and every file the last build
++// read. A file inside a node_modules is covered by the nearest lockfile above it,
++// or by its package's version, so the key can be checked on a bench whose
++// packages are not installed, such as one that downloaded prebuilt assets. Paths
++// are relative to the bench, for the same reason.
++//
++// The stamp sits inside the output directory, which vite empties on every build,
++// so output and stamp always go away together.
++
++import crypto from "node:crypto";
++import fs from "node:fs";
++import path from "node:path";
++import { fileURLToPath } from "node:url";
++
++import { benchPaths, findBenchRoot } from "./assets.js";
++
++const STAMP = ".inputs.json";
++
++const presetDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
++
++/**
++ * Whether the output of the last build is still what these inputs would build,
++ * and still registered in assets.json.
++ *
++ * Takes the options of `buildIslands`, and resolves them the same way, so both
++ * sides agree on paths.
++ */
++export function islandsUnchanged(options) {
++	const { app, subdir, production } = options;
++	let root, entries;
++	try {
++		root = fs.realpathSync(options.root);
++		entries = Object.fromEntries(
++			Object.entries(options.entries).map(([name, file]) => [name, fs.realpathSync(file)])
++		);
++	} catch {
++		return false;
++	}
++
++	const paths = benchPaths(findBenchRoot(root), app, subdir);
++	const stamp = readJson(path.join(paths.distDir, STAMP));
++	if (!stamp?.key || !Array.isArray(stamp.files) || !stamp.assets) return false;
++
++	const packages = stamp.packages ?? {};
++	const reinstalled = Object.entries(packages).some(([dir, version]) => {
++		const manifest = readJson(path.join(paths.benchRoot, dir, "package.json"));
++		return manifest && (manifest.version ?? "") !== version;
++	});
++	if (reinstalled) return false;
++
++	const key = inputsKey({
++		...options,
++		paths,
++		root,
++		entries,
++		production,
++		files: stamp.files,
++		packages,
++	});
++	if (key !== stamp.key) return false;
++
++	const registered = readJson(paths.assetsJsonPath) ?? {};
++	return Object.entries(stamp.assets).every(
++		([name, url]) => registered[name] === url && fs.existsSync(path.join(paths.sitesPath, url))
++	);
++}
++
++/**
++ * Record what this build read, beside its output.
++ *
++ * @param {Object} context      the build's `islandContext`
++ * @param {Iterable<string>} moduleIds  every module id the build loaded
++ * @param {Object<string,string>} assets  asset key → URL this build registered
++ */
++export function writeInputsStamp(context, moduleIds, assets) {
++	const { paths } = context;
++	const { files, packages } = sourceFiles(paths.benchRoot, context.root, moduleIds);
++	const production = context.mode === "production";
++	const key = inputsKey({ ...context, production, files, packages });
++	fs.writeFileSync(
++		path.join(paths.distDir, STAMP),
++		JSON.stringify({ key, files, packages, assets })
++	);
++}
++
++function inputsKey({ paths, root, entries, production, files, packages, ...options }) {
++	const hash = crypto.createHash("sha256");
++	const add = (label, value) => {
++		hash.update(`${label}\0`);
++		hash.update(value);
++		hash.update("\0");
++	};
++
++	add("mode", production ? "production" : "development");
++	for (const name of Object.keys(entries).sort())
++		add("entry", `${name}=${path.relative(paths.benchRoot, entries[name])}`);
++	for (const option of ["tailwindPlugins", "forbiddenImports", "allowUnscanned"])
++		add(option, (options[option] ?? []).map(String).join("\n"));
++
++	const fixed = [
++		path.join(root, "yarn.lock"),
++		path.join(root, "package.json"),
++		...presetFiles(),
++	];
++	for (const file of fixed) add(path.relative(paths.benchRoot, file), contents(file));
++	for (const file of files) add(file, contents(path.join(paths.benchRoot, file)));
++	for (const dir of Object.keys(packages).sort()) add(`package ${dir}`, packages[dir]);
++
++	return hash.digest("hex");
++}
++
++/**
++ * The bench-relative files and packages that decide the build's modules.
++ *
++ * A file inside a node_modules is never listed, since a bench that downloaded
++ * prebuilt assets may not have it. It stands for the nearest lockfile above that
++ * node_modules, or, where none exists, for its package's version. The toolchain's
++ * packages are covered by its own lockfile already.
++ */
++function sourceFiles(benchRoot, root, moduleIds) {
++	const toolchainModules = path.join(root, "node_modules") + path.sep;
++	const files = new Set();
++	const packages = {};
++	for (const id of moduleIds) {
++		const file = id.split("?")[0];
++		if (!path.isAbsolute(file) || file.startsWith(toolchainModules)) continue;
++		if (!fs.existsSync(file)) continue;
++
++		const installed = installedPackage(file);
++		if (!installed) {
++			files.add(path.relative(benchRoot, file));
++			continue;
++		}
++		const lockfile = nearestLockfile(installed.owner, benchRoot);
++		if (lockfile) files.add(path.relative(benchRoot, lockfile));
++		else {
++			const manifest = readJson(path.join(installed.dir, "package.json"));
++			packages[path.relative(benchRoot, installed.dir)] = manifest?.version ?? "";
++		}
++	}
++	return { files: [...files].sort(), packages };
++}
++
++/** The outermost package a file sits in, and the folder whose node_modules holds it. */
++function installedPackage(file) {
++	const parts = file.split(path.sep);
++	const index = parts.indexOf("node_modules");
++	if (index === -1 || index + 1 >= parts.length - 1) return null;
++	const nameParts = parts[index + 1].startsWith("@") ? 2 : 1;
++	return {
++		owner: parts.slice(0, index).join(path.sep),
++		dir: parts.slice(0, index + 1 + nameParts).join(path.sep),
++	};
++}
++
++const LOCKFILES = ["yarn.lock", "package-lock.json", "pnpm-lock.yaml"];
++
++/** The first lockfile in `dir` or a folder above it, up to the bench root. */
++function nearestLockfile(dir, benchRoot) {
++	for (;;) {
++		for (const name of LOCKFILES) {
++			const lockfile = path.join(dir, name);
++			if (fs.existsSync(lockfile)) return lockfile;
++		}
++		if (dir === benchRoot || path.dirname(dir) === dir) return null;
++		dir = path.dirname(dir);
++	}
++}
++
++/** The preset's own source: its output changes when this code does. */
++function presetFiles() {
++	const files = [];
++	const walk = (dir) => {
++		for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
++			const file = path.join(dir, entry.name);
++			if (entry.isDirectory()) {
++				if (entry.name !== "tests") walk(file);
++			} else if (entry.name.endsWith(".js")) files.push(file);
++		}
++	};
++	walk(presetDir);
++	return files.sort();
++}
++
++/** A file's bytes, or a marker when it is gone, so a deleted file changes the key. */
++function contents(file) {
++	try {
++		return fs.readFileSync(file);
++	} catch {
++		return "\0missing";
++	}
++}
++
++function readJson(file) {
++	try {
++		return JSON.parse(fs.readFileSync(file, "utf-8"));
++	} catch {
++		return null;
++	}
++}
+diff --git a/ui/vite/island/root-to-host.js b/ui/vite/island/root-to-host.js
+new file mode 100644
+index 0000000000..562ade5739
+--- /dev/null
++++ b/ui/vite/island/root-to-host.js
+@@ -0,0 +1,18 @@
++// PostCSS plugin. It retargets document-level selectors at the shadow host, so
++// the tokens and type styles they carry reach an island. A shadow root inherits
++// from `:host`, and nothing inside one matches `:root`, `html` or `body`.
++
++const DOCUMENT_ROOTS = /(^|,)\s*(:root|html|body)\b/g;
++
++/** @type {import('postcss').Plugin} */
++const rootToHost = {
++	postcssPlugin: "island-root-to-host",
++	Rule(rule) {
++		if (typeof rule.selector !== "string") return;
++		// Leading position only. `body .foo` is a real descendant selector,
++		// but `.foo body` matches nothing a rewrite would fix.
++		rule.selector = rule.selector.replace(DOCUMENT_ROOTS, "$1:host");
++	},
++};
++
++export default rootToHost;
+diff --git a/ui/vite/island/tailwind-scan.js b/ui/vite/island/tailwind-scan.js
+new file mode 100644
+index 0000000000..4e1032d957
+--- /dev/null
++++ b/ui/vite/island/tailwind-scan.js
+@@ -0,0 +1,75 @@
++// What Tailwind scans: the source files the bundle is made of.
++//
++// The island's stylesheet is the only one inside its shadow root, so it has to
++// carry a rule for every class the bundle applies, the app's own and
++// frappe-ui's alike. Both are modules of the same build, so both are here.
++// ../../island/decisions/0003-tailwind-scans-the-module-list-not-a-glob.md
++
++import fs from "node:fs";
++import path from "node:path";
++
++/**
++ * Extensions that can hold a class usage, and so are worth a scan.
++ *
++ * A stylesheet in the graph defines rules rather than uses them, and an imported
++ * `.json` or image is data. Scanning those finds nothing, and the check below
++ * would report them as gaps no app can close.
++ */
++const SCANNED = new Set([".vue", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".html"]);
++
++/**
++ * The source files a bundle was built from.
++ *
++ * The preset scans the stylesheet from this list. The list is what the bundle is
++ * made of, so it cannot drift from the bundle.
++ *
++ * @param {Iterable<string>} modules  module ids from the bundle
++ * @returns {string[]}  absolute paths, sorted
++ */
++export function bundleSources(modules) {
++	const sources = new Set();
++	for (const id of modules) {
++		const file = sourceFile(id);
++		if (file) sources.add(file);
++	}
++	return [...sources].sort();
++}
++
++/**
++ * The bundle's source files that the stylesheet was not scanned from.
++ *
++ * @param {Object} options
++ * @param {Iterable<string>} options.modules  module ids the bundle was built from
++ * @param {Set<string>} options.scanned  what the stylesheet was scanned from
++ * @param {(string|RegExp)[]} [options.allowUnscanned]  paths to pass over
++ * @returns {string[]}  absolute paths, sorted
++ */
++export function unscannedSources({ modules, scanned, allowUnscanned = [] }) {
++	return bundleSources(modules).filter(
++		(file) => !scanned.has(file) && !allowed(file, allowUnscanned)
++	);
++}
++
++/**
++ * A real source file, or null for anything that cannot hold a class literal.
++ *
++ * Vite ids carry a query (`Button.vue?vue&type=script`), and virtual modules
++ * start with a NUL. Paths are real paths on both sides of the comparison, or a
++ * file reached through a symlink never matches the same file reached directly.
++ * Rollup already reports real paths.
++ */
++function sourceFile(id) {
++	if (!id || id.startsWith("\0")) return null;
++
++	const candidate = path.resolve(id.split("?")[0]);
++	if (!SCANNED.has(path.extname(candidate))) return null;
++	if (!fs.existsSync(candidate)) return null;
++
++	return fs.realpathSync(candidate);
++}
++
++function allowed(file, patterns) {
++	return patterns.some((pattern) =>
++		pattern instanceof RegExp ? pattern.test(file) : file.endsWith(pattern)
++	);
++}
+diff --git a/ui/vite/island/tailwind.js b/ui/vite/island/tailwind.js
+new file mode 100644
+index 0000000000..24025cae61
+--- /dev/null
++++ b/ui/vite/island/tailwind.js
+@@ -0,0 +1,67 @@
++// The app's island Tailwind config. One config for all of an app's islands,
++// because they share one stylesheet.
++
++import fs from "node:fs";
++import path from "node:path";
++
++/** Generated configs live where every other build artifact does. */
++const CONFIG_DIR = "node_modules/.island";
++
++/**
++ * Write the island Tailwind config and return its path.
++ *
++ * The preset writes a file instead of passing a config object, because only
++ * Tailwind's own config loader resolves `tailwindcss/plugin`. Tailwind 3
++ * publishes no `exports` entry for that subpath, and `frappe-ui/tailwind` is ESM
++ * that imports it. Plugins arrive as module specifiers for the same reason. The
++ * file sits in the app's `node_modules`, so a bare specifier resolves against
++ * the app's own dependencies.
++ *
++ * `content` is the bundle's module list, not a glob the app keeps. See
++ * `discoverSources` in ./index.js.
++ *
++ * @param {Object} context  from `islandContext`
++ * @param {string[]} sources  absolute paths of the files to scan
++ * @returns {string} the config's path
++ */
++export function writeIslandTailwindConfig(context, sources) {
++	const { root, app, paths, tailwindPlugins = [] } = context;
++	const dir = path.join(root, CONFIG_DIR);
++	// One per build, not per app: two builds of one app on one root, such as
++	// framework's page islands and its own, would scan each other's sources.
++	const configPath = path.join(
++		dir,
++		`tailwind.${app}.${path.basename(paths.distDir)}.config.mjs`
++	);
++	const pluginNames = tailwindPlugins.map((_, index) => `plugin${index}`);
++
++	fs.mkdirSync(dir, { recursive: true });
++	// the one config per app that builds wrote before
++	fs.rmSync(path.join(dir, `tailwind.${app}.config.mjs`), { force: true });
++	fs.writeFileSync(
++		configPath,
++		[
++			"// Generated by @framework/ui/vite/island. Do not edit.",
++			'import preset from "frappe-ui/tailwind";',
++			...tailwindPlugins.map(
++				(specifier, index) =>
++					`import ${pluginNames[index]} from ${JSON.stringify(specifier)};`
++			),
++			"",
++			"export default {",
++			"	presets: [preset],",
++			// The shadow root holds one theme container, and the island's own
++			// `dark:` utilities flip on the attribute the mount contract sets.
++			'	darkMode: ["selector", \'[data-theme="dark"]\'],',
++			`	content: ${JSON.stringify(sources, null, 1).replace(/\n/g, "\n\t")},`,
++			// The app's own plugins. Without them its `@container` and the like
++			// compile to nothing here, while they work in its SPA build.
++			`	plugins: [${pluginNames.join(", ")}],`,
++			"	theme: { extend: {} },",
++			"};",
++			"",
++		].join("\n")
++	);
++
++	return configPath;
++}
+diff --git a/ui/vite/island/tools.js b/ui/vite/island/tools.js
+new file mode 100644
+index 0000000000..01d5dc5441
+--- /dev/null
++++ b/ui/vite/island/tools.js
+@@ -0,0 +1,95 @@
++// The build tooling, resolved from the app.
++//
++// This preset ships as source inside `@framework/ui`, which a bench links by
++// relative path. Node resolves a bare specifier from a module's real path, so an
++// `import "vite"` here would look beside the framework checkout. A bench never
++// installs a frontend's dependencies there. The app is the one place where
++// Vite, Tailwind and frappe-ui are installed, so the preset resolves every
++// build-time dependency from there.
++// ../../../island/decisions/0005-the-preset-resolves-its-tooling-from-the-app.md
++
++import fs from "node:fs";
++import path from "node:path";
++import { pathToFileURL } from "node:url";
++
++/** Every module the preset needs from the app's own tree. */
++const TOOLS = {
++	vite: "vite",
++	vue: "@vitejs/plugin-vue",
++	tailwindcss: "tailwindcss",
++	autoprefixer: "autoprefixer",
++	lucideIcons: "frappe-ui/vite/lucideIconsPlugin",
++	compilerSfc: "vue/compiler-sfc",
++	typescript: "typescript",
++};
++
++/** Generated modules live where every other build artifact does. */
++const GENERATED_DIR = "node_modules/.island";
++
++/**
++ * Load the preset's build tooling out of the app at `root`.
++ *
++ * The preset writes a module into the app's `node_modules` and imports that,
++ * instead of resolving each specifier itself. A bare import inside the written
++ * file resolves against the app's dependencies, through Node's own resolver and
++ * its `import` condition. To resolve from here instead, the preset would
++ * re-implement that. `require.resolve` reads the `require` condition, and it
++ * refuses an ESM-only subpath such as `frappe-ui/vite/lucideIconsPlugin`.
++ *
++ * @param {string} root  the app's frontend directory
++ * @returns {Promise<Object>}  one loaded module per key of `TOOLS`
++ */
++export async function loadTools(root) {
++	const file = path.join(root, GENERATED_DIR, "tools.mjs");
++
++	fs.mkdirSync(path.dirname(file), { recursive: true });
++	fs.writeFileSync(
++		file,
++		[
++			"// Generated by @framework/ui/vite/island. Do not edit.",
++			...Object.entries(TOOLS).map(
++				([key, specifier]) => `export * as ${key} from ${JSON.stringify(specifier)};`
++			),
++			"",
++		].join("\n")
++	);
++
++	let tools;
++	try {
++		tools = await import(pathToFileURL(file).href);
++	} catch (error) {
++		throw new Error(
++			`island: the build tooling does not resolve from ${root}: ` +
++				`${error.message}\nThe island build runs on the app's own ` +
++				"tooling, so the app has to depend on it. Add the missing " +
++				"package to the frontend's devDependencies."
++		);
++	}
++
++	registerTypeScript(tools);
++	return tools;
++}
++
++/**
++ * `module.exports`, out of a dynamically imported CommonJS module.
++ *
++ * Tailwind, autoprefixer and compiler-sfc are CommonJS. A static
++ * `import x from "tailwindcss"` binds `module.exports` to `x`. A namespace
++ * import answers with the namespace instead, and puts `module.exports` on its
++ * `default`.
++ */
++export const interop = (module) => module.default ?? module;
++
++/**
++ * Give compiler-sfc a TypeScript, so it can resolve a prop type imported from
++ * another package.
++ *
++ * frappe-ui's `ImageGroupNodeView.vue` writes `defineProps<NodeViewProps>()`
++ * against a type from `@tiptap/vue-3`. compiler-sfc resolves that only through
++ * the TypeScript compiler API, and @vitejs/plugin-vue registers no compiler. The
++ * version must be TS >= 5: the types sit behind `exports` maps that only
++ * `moduleResolution: bundler` can follow.
++ */
++function registerTypeScript({ compilerSfc, typescript }) {
++	interop(compilerSfc).registerTS(() => interop(typescript));
++}
+diff --git a/ui/vite/island/vue.js b/ui/vite/island/vue.js
+new file mode 100644
+index 0000000000..4127f068fe
+--- /dev/null
++++ b/ui/vite/island/vue.js
+@@ -0,0 +1,23 @@
++// The Vue SFC plugin, configured the one way an island may compile a template.
++//
++// The compiler drops comments, always. A template that keeps its comments
++// renders the component as a fragment, so every fallthrough attribute (`class`,
++// `style`, listeners) lands on nothing, with no warning. 33 components in
++// frappe-ui open their template with a comment. The compiler otherwise takes
++// this from the build mode, which would make a development island and a shipped
++// one render differently.
++
++/**
++ * @param {Function} vue  `@vitejs/plugin-vue`, from the app's tree
++ * @param {Object} [options]
++ * @returns {import('vite').Plugin[]}
++ */
++export function islandVue(vue, options = {}) {
++	return vue({
++		...options,
++		template: {
++			...options.template,
++			compilerOptions: { ...options.template?.compilerOptions, comments: false },
++		},
++	});
++}
+-- 
+2.43.0
+
