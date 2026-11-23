@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "node frontend/build-islands.mjs --production",
     "build:islands": "node frontend/build-islands.mjs",
     "watch:islands": "node frontend/build-islands.mjs --watch",
     "postinstall": "patch-package"
