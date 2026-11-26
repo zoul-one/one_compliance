@@ -61,14 +61,12 @@
                         <span class="notification-title">
                             {{ notification.title }}
                         </span>
-
                         <span
                             v-if="!notification.read"
                             class="unread-indicator"
                             title="Unread"
                         ></span>
                     </div>
-
                     <div class="notification-meta">
                         <span>{{ notification.source }}</span>
                         <span class="meta-separator">·</span>
@@ -93,16 +91,7 @@
             <!-- TODO OVERVIEW -->
             <div class="todo-toolbar">
                 <div class="todo-summary">
-                    <button
-                        type="button"
-                        class="todo-filter-badge todo-filter-all"
-                        :class="{ active: activeTodoFilter === 'All' }"
-                        @click="activeTodoFilter = 'All'"
-                    >
-                        All {{ todoTasks.length }}
-                    </button>
-
-                    <button
+<button
                         type="button"
                         class="todo-filter-badge todo-filter-pending"
                         :class="{ active: activeTodoFilter === 'Pending' }"
@@ -110,16 +99,14 @@
                     >
                         {{ pendingTasksCount }} Pending
                     </button>
-
                     <button
                         type="button"
-                        class="todo-filter-badge todo-filter-completed"
-                        :class="{ active: activeTodoFilter === 'Completed' }"
-                        @click="activeTodoFilter = 'Completed'"
+                        class="todo-filter-badge todo-filter-overdue"
+                        :class="{ active: activeTodoFilter === 'Overdue' }"
+                        @click="activeTodoFilter = 'Overdue'"
                     >
-                        {{ completedTasksCount }} Completed
+                        {{ overdueTasksCount }} Overdue
                     </button>
-
                     <div class="todo-priority-control">
                         <button
                             type="button"
@@ -130,7 +117,6 @@
                             Priority
                             <Icon name="lucide-chevron-down" />
                         </button>
-
                         <div v-if="showPriorityMenu" class="todo-priority-menu">
                             <button
                                 v-for="priority in ['All', 'Low', 'Medium', 'High']"
@@ -148,10 +134,6 @@
                     </div>
                 </div>
 
-
-                <span class="todo-hint">
-                    Tick a task to complete it
-                </span>
             </div>
             <!-- TASK ITEMS -->
             <div
@@ -249,14 +231,12 @@
                         :rows="3"
                         required
                     />
-
                     <FormControl
                         v-model="editingTask.deadline"
                         type="date"
                         label="Deadline"
                         required
                     />
-
                     <FormControl
                         v-model="editingTask.priority"
                         type="select"
@@ -321,7 +301,7 @@ const unreadCount = computed(() =>
     notifications.value.filter(item => !item.read).length
 )
 // Convert Frappe notification/ToDo HTML into safe, readable plain text.
-// DOMParser also decodes entities such as &amp; and &lt;.
+// DOMParser also decodes entities such as & and <.
 function toPlainText(value) {
     if (!value) return ''
     const parsed = new DOMParser().parseFromString(String(value), 'text/html')
@@ -492,38 +472,29 @@ async function loadTodos() {
         console.error('Failed to load ToDo records:', error)
     }
 }
-const completedTasksCount = computed(() =>
-    todoTasks.value.filter(task => task.status === 'Closed').length
-)
 const pendingTasksCount = computed(() =>
     todoTasks.value.filter(task => task.status === 'Open').length
 )
 
+const overdueTasksCount = computed(() =>
+    todoTasks.value.filter(task => taskStatus(task) === 'Overdue').length
+)
 // ==================================================
 // TODO FILTERS
 // ==================================================
-
-const activeTodoFilter = ref('All')
+const activeTodoFilter = ref('Pending')
 const activePriorityFilter = ref('All')
 const showPriorityMenu = ref(false)
-
 const filteredTodoTasks = computed(() => {
     let result = todoTasks.value
-
-    // Main status filter
     if (activeTodoFilter.value === 'Pending') {
         result = result.filter(task => task.status === 'Open')
-    } else if (activeTodoFilter.value === 'Completed') {
-        result = result.filter(task => task.status === 'Closed')
+    } else if (activeTodoFilter.value === 'Overdue') {
+        result = result.filter(task => taskStatus(task) === 'Overdue')
     }
-
-    // Secondary priority filter
     if (activePriorityFilter.value !== 'All') {
-        result = result.filter(
-            task => task.priority === activePriorityFilter.value
-        )
+        result = result.filter(task => task.priority === activePriorityFilter.value)
     }
-
     return result
 })
 // ==================================================
@@ -644,9 +615,10 @@ async function saveTask() {
 <style scoped>
 /* ==================================================
    MAIN PANEL
-================================================== */
+\================================================== */
 .activity-panel {
     height: 430px;
+    width: 100%;
     min-width: 0;
     display: flex;
     flex-direction: column;
@@ -658,11 +630,10 @@ async function saveTask() {
         0 1px 2px rgba(15, 23, 42, 0.035),
         0 4px 10px rgba(15, 23, 42, 0.045),
         0 10px 24px rgba(15, 23, 42, 0.035);
-
 }
 /* ==================================================
    COMBINED HEADER AND TABS
-================================================== */
+\================================================== */
 .activity-header {
     display: flex;
     align-items: center;
@@ -697,7 +668,7 @@ async function saveTask() {
 }
 /* ==================================================
    SHARED SCROLLABLE AREA
-================================================== */
+\================================================== */
 .activity-list {
     flex: 1;
     min-height: 0;
@@ -716,7 +687,7 @@ async function saveTask() {
 }
 /* ==================================================
    NOTIFICATION OVERVIEW
-================================================== */
+\================================================== */
 /* NOTIFICATION OVERVIEW */
 .notification-toolbar {
     position: sticky;
@@ -733,7 +704,6 @@ async function saveTask() {
     border-bottom: 1px solid var(--border-color);
     flex-shrink: 0;
 }
-
 .notification-summary {
     display: flex;
     align-items: center;
@@ -741,14 +711,19 @@ async function saveTask() {
     font-size: 11px;
     color: #000000
 }
-
 .notification-toolbar :deep(button) {
-    color: #272727 !important;
-    font-weight: 500;
+    color: #2d2d2d !important;
+    font-weight: 450;
+}
+
+.notification-toolbar :deep(button:disabled) {
+    color: #9ca3af !important;
+    cursor: not-allowed;
+    opacity: 0.65;
 }
 /* ==================================================
    NOTIFICATION ITEMS
-================================================== */
+\================================================== */
 .notification-item {
     display: flex;
     align-items: flex-start;
@@ -820,7 +795,6 @@ async function saveTask() {
     background: #2563eb;
     flex-shrink: 0;
 }
-
 .notification-meta {
     display: flex;
     align-items: center;
@@ -834,7 +808,7 @@ async function saveTask() {
 }
 /* ==================================================
    TODO OVERVIEW
-================================================== */
+\================================================== */
 .todo-toolbar {
     position: sticky;
     top: 0;
@@ -860,7 +834,6 @@ async function saveTask() {
     gap: 7px;
     flex-wrap: wrap;
 }
-
 .todo-filter-badge {
     display: inline-flex;
     align-items: center;
@@ -876,41 +849,34 @@ async function saveTask() {
     cursor: pointer;
     transition: background 0.15s ease, border-color 0.15s ease;
 }
-
 .todo-filter-all {
     color: #1d4ed8;
     background: #eff6ff;
     border-color: #2563eb;
 }
-
 .todo-filter-pending {
     color: #b45309;
     background: #fffbeb;
     border-color: #d97706;
 }
-
-.todo-filter-completed {
-    color: #15803d;
-    background: #f0fdf4;
-    border-color: #16a34a;
+.todo-filter-overdue {
+    color: #b91c1c;
+    background: #fee2e2;
+    border-color: #ef4444;
 }
-
 .todo-filter-badge.active {
     font-weight: 700;
     box-shadow: inset 0 0 0 1px currentColor;
 }
-
 .todo-filter-badge:hover {
     filter: brightness(0.96);
 }
-
 .todo-priority-control {
     position: relative;
     display: flex;
     align-items: center;
     white-space: nowrap;
 }
-
 .todo-priority-trigger {
     display: inline-flex;
     align-items: center;
@@ -928,12 +894,10 @@ async function saveTask() {
     white-space: nowrap;
     cursor: pointer;
 }
-
 .todo-priority-trigger:hover {
     background: #f1f5f9;
     border-color: #1e293b;
 }
-
 .todo-priority-trigger :deep(svg) {
     width: 12px;
     height: 12px;
@@ -952,7 +916,6 @@ async function saveTask() {
     border-radius: 6px;
     box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
 }
-
 .todo-priority-menu button {
     display: block;
     width: 100%;
@@ -966,19 +929,13 @@ async function saveTask() {
     font-size: 13px;
     cursor: pointer;
 }
-
 .todo-priority-menu button:hover {
     background: #f1f5f9;
 }
-
 .todo-priority-menu button.selected {
     background: #eff6ff;
     color: #2563eb;
     font-weight: 600;
-}
-
-.todo-priority-control select:focus {
-    border-color: #64748b;
 }
 .todo-hint {
     font-size: 10px;
@@ -986,7 +943,7 @@ async function saveTask() {
 }
 /* ==================================================
    TODO ITEMS
-================================================== */
+\================================================== */
 .todo-item {
     display: flex;
     align-items: flex-start;
@@ -1046,7 +1003,7 @@ async function saveTask() {
 }
 /* ==================================================
    STATUS AND PRIORITY BADGES
-================================================== */
+\================================================== */
 .todo-status-badge,
 .todo-priority-badge {
     display: inline-flex;
@@ -1092,13 +1049,13 @@ async function saveTask() {
 }
 /* ==================================================
    EDIT TASK BUTTON
-================================================== */
+\================================================== */
 .edit-task-button {
     flex-shrink: 0;
 }
 /* ==================================================
    EMPTY STATE
-================================================== */
+\================================================== */
 .activity-empty-state {
     min-height: 150px;
     display: flex;
@@ -1115,7 +1072,7 @@ async function saveTask() {
 }
 /* ==================================================
    EDIT TASK MODAL
-================================================== */
+\================================================== */
 .todo-modal-backdrop {
     position: fixed;
     inset: 0;
@@ -1148,14 +1105,12 @@ async function saveTask() {
     border-bottom: 1px solid var(--border-color);
     background: var(--surface-card);
 }
-
 .todo-modal-header h3 {
     margin: 0;
     font-size: 16px;
     font-weight: 600;
     color: var(--text-color);
 }
-
 .todo-modal-header p {
     margin: 5px 0 0;
     font-size: 12px;
@@ -1214,7 +1169,7 @@ async function saveTask() {
 }
 /* ==================================================
    RESPONSIVE
-================================================== */
+\================================================== */
 @media (max-width: 500px) {
     .activity-header {
         align-items: flex-start;

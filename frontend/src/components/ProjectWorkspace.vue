@@ -63,8 +63,41 @@
                         {{ project.customer }}
                     </div>
                     <div class="project-assignee">
-                        <div class="assignee-name" :title="project.assignedTo">
-                            {{ project.assignedTo }}
+                        <HoverCard
+                            v-if="project.assignees.length"
+                            side="top"
+                            align="start"
+                            :hover-delay="200"
+                            arrow
+                        >
+                            <template #trigger>
+                                <div
+                                    class="assignee-name"
+                                    tabindex="0"
+                                    :aria-label="`Assigned to: ${project.assignedTo}`"
+                                >
+                                    {{ project.assignedTo }}
+                                </div>
+                            </template>
+
+                            <template #default>
+                                <div class="assignee-hover-card">
+                                    <div class="assignee-hover-card-title">
+                                        Assigned to
+                                    </div>
+                                    <ul>
+                                        <li
+                                            v-for="(assignee, index) in project.assignees"
+                                            :key="`${project.id}-assignee-${index}`"
+                                        >
+                                            {{ assignee }}
+                                        </li>
+                                    </ul>
+                                </div>
+                            </template>
+                        </HoverCard>
+                        <div v-else class="assignee-name">
+                            Unassigned
                         </div>
                     </div>
                 </div>
@@ -120,7 +153,7 @@
                 <template v-if="selectedProject">
                     <div class="task-table-header">
                         <span>Name</span>
-                        <span>End Date</span>
+                        <span>Deadline</span>
                         <span>Status</span>
                         <span>Quick Actions</span>
                     </div>
@@ -351,7 +384,7 @@
 
                     <div class="project-header-actions">
                         <button
-                            v-for="filter in taskFilters"
+                            v-for="filter in modalTaskFilters"
                             :key="filter.value"
                             class="filter-button"
                             :class="[
@@ -403,6 +436,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { Badge, Button, Icon, HoverCard, createResource } from 'frappe-ui'
+import { matchesProjectFilter } from '../utils/projectFilters'
 // --------------------------------------------------
 // FETCH PROJECT WORKSPACE DATA
 // --------------------------------------------------
@@ -1131,6 +1165,7 @@ const projects = computed(() =>
         id: project.name,
         name: project.project_name || project.name,
         customer: project.customer_name || project.customer || '—',
+        assignees: project.assignees || [],
         assignedTo: (project.assignees || []).join(', ') || 'Unassigned',
         deadline: project.expected_end_date || null,
         createdOn: project.creation || null,
@@ -1145,6 +1180,7 @@ const projects = computed(() =>
             priority: task.priority || '—',
             startDate: task.start_date || null,
             endDate: task.deadline || null,
+            deadlineState: task.deadline_state || null,
             progress: Number(task.progress || 0),
             assignees: task.assignees || [],
             // Additional fields for task actions
@@ -1253,13 +1289,12 @@ const sortedProjects = computed(() => {
 
 const projectFilters = [
     { label: 'All', value: 'All' },
-    { label: 'Working', value: 'Open' },
+    { label: 'Working', value: 'Working' },
     { label: 'Complete', value: 'Completed' },
 ]
 
 const modalProjectFilters = [
     ...projectFilters,
-    { label: 'On Hold / Cancelled', value: 'On Hold / Cancelled' },
     { label: 'Overdue', value: 'Overdue' },
 ]
 function filterColorClass(value) {
@@ -1270,7 +1305,7 @@ function filterColorClass(value) {
         Completed: 'filter-green',
         Complete: 'filter-green',
         'On Hold / Cancelled': 'filter-gray',
-        Overdue: 'filter-gray',
+        Overdue: 'filter-red',
     }
 
     return colors[value] || 'filter-gray'
@@ -1279,39 +1314,19 @@ function filterColorClass(value) {
 const activeProjectFilter = ref('All')
 const activeModalProjectFilter = ref('All')
 
-const filteredModalProjects = computed(() => {
-    const filter = activeModalProjectFilter.value
 
-    if (filter === 'All') {
-        return sortedProjects.value
-    }
-
-    if (filter === 'On Hold / Cancelled') {
-        return sortedProjects.value.filter(project =>
-            ['On Hold', 'Cancelled'].includes(project.status)
-        )
-    }
-
-    return sortedProjects.value.filter(
-        project => project.status === filter
+const filteredProjects = computed(() =>
+    sortedProjects.value.filter(project =>
+        matchesProjectFilter(project, activeProjectFilter.value)
     )
-})
+)
 
-const filteredProjects = computed(() => {
-    if (activeProjectFilter.value === 'All') {
-        return sortedProjects.value
-    }
-
-    if (activeProjectFilter.value === 'On Hold / Cancelled') {
-        return sortedProjects.value.filter(project =>
-            ['On Hold', 'Cancelled'].includes(project.status)
-        )
-    }
-
-    return sortedProjects.value.filter(
-        project => project.status === activeProjectFilter.value
+const filteredModalProjects = computed(() =>
+    sortedProjects.value.filter(project =>
+        matchesProjectFilter(project, activeModalProjectFilter.value)
     )
-})
+)
+
 // --------------------------------------------------
 // PROJECT SELECTION AND TASK FILTERS
 // --------------------------------------------------
@@ -1343,26 +1358,49 @@ const taskFilters = [
     { label: 'Completed', value: 'Completed' },
 ]
 
+// The All Project Tasks popup has an additional dedicated Overdue filter.
+const modalTaskFilters = [
+    ...taskFilters,
+    { label: 'Overdue', value: 'Overdue' },
+]
+
 const activeFilter = ref('All')
 const activeModalTaskFilter = ref('All')
 
-const filteredModalTasks = computed(() => {
-    if (activeModalTaskFilter.value === 'All') {
-        return projectTasks.value
+// Overdue is a separate Task status in this app, and the backend can also
+// flag an otherwise Working task as overdue through its deadline_state.
+// Both cases belong in the Working filter so overdue work is not hidden.
+function matchesTaskFilter(task, filter) {
+    if (filter === 'All') return true
+    if (filter === 'Overdue') {
+        return task.status === 'Overdue'
+            || (
+                task.deadlineState === 'Overdue'
+                && !['Completed', 'Cancelled'].includes(task.status)
+            )
     }
+    if (filter === 'Working') {
+        return task.status === 'Working'
+            || task.status === 'Overdue'
+            || (
+                task.deadlineState === 'Overdue'
+                && !['Completed', 'Cancelled'].includes(task.status)
+            )
+    }
+    return task.status === filter
+}
 
-    return projectTasks.value.filter(
-        task => task.status === activeModalTaskFilter.value
+const filteredModalTasks = computed(() =>
+    projectTasks.value.filter(task =>
+        matchesTaskFilter(task, activeModalTaskFilter.value)
     )
-})
-const filteredTasks = computed(() => {
-    if (activeFilter.value === 'All') {
-        return projectTasks.value
-    }
-    return projectTasks.value.filter(
-        task => task.status === activeFilter.value
+)
+
+const filteredTasks = computed(() =>
+    projectTasks.value.filter(task =>
+        matchesTaskFilter(task, activeFilter.value)
     )
-})
+)
 
 function selectProject(project) {
     selectedProject.value = project
@@ -1406,6 +1444,7 @@ function projectStatusTheme(status) {
     const themes = {
         Completed: 'green',
         Open: 'blue',
+        Overdue: 'red',
         'On Hold': 'orange',
         Cancelled: 'gray',
     }
@@ -1651,6 +1690,8 @@ function projectStatusTheme(status) {
     min-width: 0;
 }
 .assignee-name {
+    display: block;
+    width: 100%;
     min-width: 0;
     padding: 6px 7px;
     border: 1px solid var(--border-color);
@@ -1658,9 +1699,48 @@ function projectStatusTheme(status) {
     background: var(--surface-card);
     color: var(--text-color);
     font-size: 10px;
+    text-align: left;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    cursor: default;
+}
+
+.assignee-name:focus-visible {
+    outline: 2px solid var(--blue-500);
+    outline-offset: 2px;
+}
+
+.assignee-hover-card {
+    min-width: 180px;
+    max-width: 300px;
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 10px 12px;
+    color: #334155;
+    font-size: 12px;
+}
+
+.assignee-hover-card-title {
+    margin-bottom: 7px;
+    color: #64748b;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.assignee-hover-card ul {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin: 0;
+    padding-left: 17px;
+}
+
+.assignee-hover-card li {
+    overflow-wrap: anywhere;
+    line-height: 1.4;
 }
 /* PROJECT NAME AND META */
 .project-item-content {
@@ -1760,7 +1840,14 @@ function projectStatusTheme(status) {
     border-color: #bbf7d0;
 }
 
-/* GREY - ON HOLD / CANCELLED / OVERDUE */
+/* RED - OVERDUE */
+.filter-red {
+    color: #b91c1c;
+    background: #fee2e2;
+    border-color: #fecaca;
+}
+
+/* GREY - ON HOLD / CANCELLED */
 .filter-gray {
     color: #64748b;
     background: #f1f5f9;
