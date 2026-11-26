@@ -83,6 +83,22 @@ def get_standard_working_hours():
     if standard_hours <= 0:
         standard_hours = 9
     return standard_hours
+
+def get_weekly_target_hours():
+    """
+    Return the fixed weekly target configured in Compliance Settings.
+    The target is shared by Check In / Out, Timesheet, and Effective Hours.
+    A default of 45 hours preserves the existing Timesheet/attendance target
+    when the setting has not yet been configured.
+    """
+    weekly_target = frappe.db.get_single_value(
+        "Compliance Settings",
+        "weekly_target_hours",
+    )
+    weekly_target = flt(weekly_target)
+    if weekly_target <= 0:
+        weekly_target = 45
+    return weekly_target
 # ============================================================
 # WORKING HOURS
 # ============================================================
@@ -472,20 +488,11 @@ def get_my_day_summary(date=None):
 @frappe.whitelist()
 def get_weekly_working_hours_analysis():
     """
-    Return current-week working-hour analysis.
-    IMPORTANT:
-    Only elapsed days are returned.
-    Example:
-    Monday:
-        Monday
-    Tuesday:
-        Monday + Tuesday
-    Wednesday:
-        Monday + Tuesday + Wednesday
-    Future days are never returned.
-    Required hours come from:
-        HR Settings -> Standard Working Hours
-    Weekends have 0 required hours.
+    Return the logged-in employee's accumulated hours for the current week.
+    Tracking always starts on Monday and includes elapsed days through today.
+    The same fixed Compliance Settings weekly target is used for all three
+    categories: Employee Check In / Out, Timesheet, and Effective Hours.
+    No weekday/weekend schedule or daily target is assumed.
     """
     employee = get_logged_in_employee()
     if not employee:
@@ -493,245 +500,103 @@ def get_weekly_working_hours_analysis():
             "error": "Employee not found for current user",
             "week": [],
         }
+
     today = getdate()
-    week_start = add_days(
-        today,
-        -today.weekday(),
-    )
-    week_end = today
-    standard_working_hours = (
-        get_standard_working_hours()
-    )
+    week_start = add_days(today, -today.weekday())
+    weekly_target_hours = get_weekly_target_hours()
+
     total_working_hours = 0
     total_effective_hours = 0
     total_office_hours = 0
     total_break_hours = 0
-    total_required_hours = 0
     total_timesheet_working_hours = 0
     daily_data = []
+
     current_date = week_start
-    while current_date <= week_end:
-        checkin_data = get_checkin_data(
-            employee,
-            current_date,
-        )
-        logs = checkin_data.get(
-            "logs",
-            [],
-        )
-        # ----------------------------------------------------
-        # WORKING HOURS
-        # ----------------------------------------------------
-        working_hours = get_working_hours(
-            logs,
-        )
-        # ----------------------------------------------------
-        # EFFECTIVE HOURS
-        # ----------------------------------------------------
-        timesheet_totals = get_timesheet_hour_totals(
-            employee,
-            current_date,
-        )
+    while current_date <= today:
+        checkin_data = get_checkin_data(employee, current_date)
+        logs = checkin_data.get("logs", [])
+
+        working_hours = get_working_hours(logs)
+
+        timesheet_totals = get_timesheet_hour_totals(employee, current_date)
         effective_hours = timesheet_totals["effective_hours"]
         timesheet_working_hours = timesheet_totals["timesheet_working_hours"]
-        # ----------------------------------------------------
-        # OFFICE DURATION
-        # ----------------------------------------------------
-        check_in = checkin_data.get(
-            "check_in"
-        )
-        check_out = checkin_data.get(
-            "check_out"
-        )
+
+        check_in = checkin_data.get("check_in")
+        check_out = checkin_data.get("check_out")
         office_hours = get_office_duration(
             check_in,
             check_out,
             current_date,
         )
-        # ----------------------------------------------------
-        # BREAK HOURS
-        # ----------------------------------------------------
-        break_hours = max(
-            0,
-            office_hours - working_hours,
-        )
-        # ----------------------------------------------------
-        # REQUIRED HOURS
-        # ----------------------------------------------------
-        if current_date.weekday() < 5:
-            required_hours = (
-                standard_working_hours
-            )
-        else:
-            required_hours = 0
-        # ----------------------------------------------------
-        # DAILY GAP
-        # ----------------------------------------------------
-        gap_hours = max(
-            0,
-            required_hours - timesheet_working_hours,
-        )
-        # ----------------------------------------------------
-        # DAILY CONSISTENCY
-        # ----------------------------------------------------
-        consistency_percentage = 0
-        if required_hours:
-            consistency_percentage = (
-                timesheet_working_hours
-                / required_hours
-            ) * 100
-        consistency_percentage = min(
-            100,
-            max(
-                0,
-                consistency_percentage,
-            ),
-        )
-        # ----------------------------------------------------
-        # WEEKLY TOTALS
-        # ----------------------------------------------------
+        break_hours = max(0, office_hours - working_hours)
+
         total_working_hours += working_hours
         total_effective_hours += effective_hours
         total_timesheet_working_hours += timesheet_working_hours
         total_office_hours += office_hours
         total_break_hours += break_hours
-        total_required_hours += required_hours
-        # ----------------------------------------------------
-        # DAILY DATA
-        # ----------------------------------------------------
-        daily_data.append(
-            {
-                "date": str(
-                    current_date
-                ),
-                "day": current_date.strftime(
-                    "%a"
-                ),
-                "working_hours": flt(
-                    working_hours,
-                    2,
-                ),
-                "effective_hours": flt(
-                    effective_hours,
-                    2,
-                ),
-                "timesheet_working_hours": flt(
-                    timesheet_working_hours,
-                    2,
-                ),
-                "office_hours": flt(
-                    office_hours,
-                    2,
-                ),
-                "break_hours": flt(
-                    break_hours,
-                    2,
-                ),
-                "required_hours": flt(
-                    required_hours,
-                    2,
-                ),
-                "gap_hours": flt(
-                    gap_hours,
-                    2,
-                ),
-                "consistency_percentage": flt(
-                    consistency_percentage,
-                    2,
-                ),
-                "check_in": (
-                    str(check_in)
-                    if check_in
-                    else None
-                ),
-                "check_out": (
-                    str(check_out)
-                    if check_out
-                    else None
-                ),
-                "is_today": (
-                    current_date == today
-                ),
-            }
-        )
-        current_date = add_days(
-            current_date,
-            1,
-        )
-    # --------------------------------------------------------
-    # WEEKLY GAP
-    # --------------------------------------------------------
-    weekly_gap = max(
-        0,
-        total_required_hours
-        - total_timesheet_working_hours,
-    )
-    # --------------------------------------------------------
-    # WEEKLY CONSISTENCY
-    # --------------------------------------------------------
-    weekly_consistency = 0
-    if total_required_hours:
-        weekly_consistency = (
-            total_timesheet_working_hours
-            / total_required_hours
-        ) * 100
-    weekly_consistency = min(
+
+        daily_data.append({
+            "date": str(current_date),
+            "day": current_date.strftime("%a"),
+            "working_hours": flt(working_hours, 2),
+            "effective_hours": flt(effective_hours, 2),
+            "timesheet_working_hours": flt(timesheet_working_hours, 2),
+            "office_hours": flt(office_hours, 2),
+            "break_hours": flt(break_hours, 2),
+            "check_in": str(check_in) if check_in else None,
+            "check_out": str(check_out) if check_out else None,
+            "is_today": current_date == today,
+        })
+        current_date = add_days(current_date, 1)
+
+    attendance_progress = min(
         100,
-        max(
-            0,
-            weekly_consistency,
-        ),
+        max(0, (total_working_hours / weekly_target_hours) * 100)
+        if weekly_target_hours else 0,
     )
-    # --------------------------------------------------------
-    # RETURN
-    # --------------------------------------------------------
+    timesheet_progress = min(
+        100,
+        max(0, (total_timesheet_working_hours / weekly_target_hours) * 100)
+        if weekly_target_hours else 0,
+    )
+    effective_progress = min(
+        100,
+        max(0, (total_effective_hours / weekly_target_hours) * 100)
+        if weekly_target_hours else 0,
+    )
+
+    # Retain the existing overall gap/consistency fields, based on Timesheet.
+    weekly_gap = max(0, weekly_target_hours - total_timesheet_working_hours)
+    weekly_consistency = timesheet_progress
+
     return {
         "employee": employee,
-        "week_start": str(
-            week_start
-        ),
-        "week_end": str(
-            week_end
-        ),
-        "today": str(
-            today
-        ),
-        "standard_working_hours": flt(
-            standard_working_hours,
-            2,
-        ),
+        "week_start": str(week_start),
+        "week_end": str(today),
+        "today": str(today),
+        "weekly_target_hours": flt(weekly_target_hours, 2),
+        "standard_working_hours": flt(weekly_target_hours, 2),
+        "progress": {
+            "working_hours_percentage": flt(attendance_progress, 2),
+            "timesheet_percentage": flt(timesheet_progress, 2),
+            "effective_hours_percentage": flt(effective_progress, 2),
+        },
         "totals": {
-            "working_hours": flt(
-                total_working_hours,
-                2,
-            ),
-            "effective_hours": flt(
-                total_effective_hours,
-                2,
-            ),
-            "timesheet_working_hours": flt(
-                total_timesheet_working_hours,
-                2,
-            ),
-            "break_hours": flt(
-                total_break_hours,
-                2,
-            ),
-            "required_hours": flt(
-                total_required_hours,
-                2,
-            ),
-            "gap_hours": flt(
-                weekly_gap,
-                2,
-            ),
-            "consistency_percentage": flt(
-                weekly_consistency,
-                2,
-            ),
+            "working_hours": flt(total_working_hours, 2),
+            "effective_hours": flt(total_effective_hours, 2),
+            "timesheet_working_hours": flt(total_timesheet_working_hours, 2),
+            "office_hours": flt(total_office_hours, 2),
+            "break_hours": flt(total_break_hours, 2),
+            "required_hours": flt(weekly_target_hours, 2),
+            "gap_hours": flt(weekly_gap, 2),
+            "consistency_percentage": flt(weekly_consistency, 2),
         },
         "daily": daily_data,
     }
+
 # ============================================================
 # 3. TASK COMPLETION
 # ============================================================
@@ -1133,17 +998,27 @@ def get_project_responsibility():
         }
     project_names = frappe.db.sql(
         """
-        SELECT DISTINCT
-            t.project
+        SELECT DISTINCT t.project
         FROM `tabTask` t
-        INNER JOIN `tabToDo` td
-            ON td.reference_type = 'Task'
-            AND td.reference_name = t.name
-        WHERE td.allocated_to = %s
-            AND t.project IS NOT NULL
+        WHERE t.project IS NOT NULL
             AND t.project != ''
+            AND (
+                EXISTS (
+                    SELECT 1 FROM `tabToDo` td
+                    WHERE td.reference_type = 'Task'
+                        AND td.reference_name = t.name
+                        AND td.allocated_to = %s
+                        AND IFNULL(td.status, 'Open') != 'Cancelled'
+                )
+                OR EXISTS (
+                    SELECT 1 FROM `tabDocShare` ds
+                    WHERE ds.share_doctype = 'Task'
+                        AND ds.share_name = t.name
+                        AND ds.user = %s
+                )
+            )
         """,
-        user,
+        (user, user),
         pluck="project",
     )
     if not project_names:
@@ -1642,6 +1517,11 @@ def get_actions_requiring_attention():
         "high_priority": high_priority,
         "tasks": result,
     }
+
+
+
+
+
 @frappe.whitelist()
 def get_project_status_cards():
     """
@@ -1683,14 +1563,19 @@ def get_project_status_cards():
             p.customer_name,
             p.expected_end_date,
             p.status,
-            p.creation,
             COUNT(t.name) AS total_tasks,
             SUM(
                 CASE
                     WHEN t.status = 'Completed' THEN 1
                     ELSE 0
                 END
-            ) AS completed_tasks
+            ) AS completed_tasks,
+            SUM(
+                CASE
+                    WHEN t.status IN ('Working', 'Completed') THEN 1
+                    ELSE 0
+                END
+            ) AS working_or_completed_tasks
         FROM `tabProject` p
         LEFT JOIN `tabTask` t
             ON t.project = p.name
@@ -1706,18 +1591,24 @@ def get_project_status_cards():
             AND EXISTS (
                 SELECT 1
                 FROM `tabTask` assigned_task
-                INNER JOIN `tabToDo` td
-                    ON td.reference_type = 'Task'
-                    AND td.reference_name = assigned_task.name
-                WHERE
-                    assigned_task.project = p.name
-                    AND td.allocated_to = %s
-                    AND IFNULL(td.status, 'Open') != 'Cancelled'
+                WHERE assigned_task.project = p.name
                     AND IFNULL(assigned_task.is_template, 0) = 0
                     AND IFNULL(assigned_task.is_group, 0) = 0
-                    AND IFNULL(assigned_task.status, '') NOT IN (
-                        'Template',
-                        'Cancelled'
+                    AND IFNULL(assigned_task.status, '') NOT IN ('Template', 'Cancelled')
+                    AND (
+                        EXISTS (
+                            SELECT 1 FROM `tabToDo` td
+                            WHERE td.reference_type = 'Task'
+                                AND td.reference_name = assigned_task.name
+                                AND td.allocated_to = %s
+                                AND IFNULL(td.status, 'Open') != 'Cancelled'
+                        )
+                        OR EXISTS (
+                            SELECT 1 FROM `tabDocShare` ds
+                            WHERE ds.share_doctype = 'Task'
+                                AND ds.share_name = assigned_task.name
+                                AND ds.user = %s
+                        )
                     )
             )
         GROUP BY
@@ -1726,12 +1617,11 @@ def get_project_status_cards():
             p.customer_name,
             p.expected_end_date,
             p.status,
-            p.creation,
             p.modified
         ORDER BY
             p.modified DESC
         """,
-        (user,),
+        (user, user),
         as_dict=True,
     )
     # --------------------------------------------------------
@@ -1741,6 +1631,9 @@ def get_project_status_cards():
     for project in projects:
         total_tasks = int(project.total_tasks or 0)
         completed_tasks = int(project.completed_tasks or 0)
+        working_or_completed_tasks = int(
+            project.working_or_completed_tasks or 0
+        )
         if total_tasks:
             progress = flt(
                 (completed_tasks / total_tasks) * 100,
@@ -1753,11 +1646,13 @@ def get_project_status_cards():
             "project_name": project.project_name,
             "customer_name": project.customer_name,
             "expected_end_date": project.expected_end_date,
-            "status": project.status,
             "total_tasks": total_tasks,
             "completed_tasks": completed_tasks,
             "progress": progress,
-            "creation": project.creation,
+            "status": project.status,
+            "has_working_or_completed_task": bool(
+                working_or_completed_tasks
+            ),
         })
     return {
         "total_projects": total_projects,
@@ -1834,7 +1729,9 @@ def get_associate_project_workspace():
             p.customer,
             p.customer_name,
             td.allocated_to,
-            u.full_name AS assignee_name
+            u.full_name AS assignee_name,
+            ds.user AS shared_with,
+            shared_user.full_name AS shared_user_name
         FROM `tabTask` t
         INNER JOIN `tabProject` p
             ON p.name = t.project
@@ -1844,6 +1741,11 @@ def get_associate_project_workspace():
             AND IFNULL(td.status, 'Open') != 'Cancelled'
         LEFT JOIN `tabUser` u
             ON u.name = td.allocated_to
+        LEFT JOIN `tabDocShare` ds
+            ON ds.share_doctype = 'Task'
+            AND ds.share_name = t.name
+        LEFT JOIN `tabUser` shared_user
+            ON shared_user.name = ds.user
         WHERE
             t.project IN ({placeholders})
             AND IFNULL(t.is_template, 0) = 0
@@ -1886,20 +1788,19 @@ def get_associate_project_workspace():
             tasks_by_project[row.project].append(
                 task_data
             )
-        # Collect all non-cancelled Task assignees.
+        # Collect ToDo assignees and users explicitly given
+        # access through Frappe's Task Share feature.
+        task_assignees = task_data_by_name[row.name]["assignees"]
         if row.allocated_to:
-            assignee_name = (
-                row.assignee_name
-                or row.allocated_to
-            )
-            task_assignees = task_data_by_name[
-                row.name
-            ]["assignees"]
+            assignee_name = row.assignee_name or row.allocated_to
             if assignee_name not in task_assignees:
                 task_assignees.append(assignee_name)
-            project_assignees[row.project].add(
-                assignee_name
-            )
+            project_assignees[row.project].add(assignee_name)
+        if row.shared_with:
+            shared_user_name = row.shared_user_name or row.shared_with
+            if shared_user_name not in task_assignees:
+                task_assignees.append(shared_user_name)
+            project_assignees[row.project].add(shared_user_name)
     # --------------------------------------------------------
     # 5. BUILD PROJECT RESPONSE
     # --------------------------------------------------------

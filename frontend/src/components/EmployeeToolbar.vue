@@ -35,18 +35,50 @@
             <!-- 2. ATTENDANCE -->
             <section class="toolbar-section attendance-section" data-tour="attendance">
                 <div class="section-heading">
-                    <span class="section-icon">
+                    <button
+                        type="button"
+                        class="section-icon attendance-history-trigger"
+                        title="View attendance history"
+                        aria-label="View attendance history"
+                        @click.stop="toggleAttendanceHistory"
+                    >
                         <Icon name="lucide-clock" />
-                    </span>
-
+                    </button>
                     <span>Attendance</span>
-
                     <Badge
                         class="attendance-status-badge"
                         :theme="isCheckedIn ? 'green' : 'gray'"
                     >
                         {{ isCheckedIn ? 'Currently Working' : 'Not Checked In' }}
                     </Badge>
+                </div>
+                <div
+                    v-if="showAttendanceHistory"
+                    class="attendance-history-dropdown"
+                    @click.stop
+                >
+                    <div class="attendance-history-header">
+                        <span>Attendance — {{ attendanceMonthLabel }}</span>
+                    </div>
+                    <div v-if="attendanceHistoryLoading" class="attendance-history-empty">
+                        Loading attendance...
+                    </div>
+                    <div v-else-if="attendanceHistory.length" class="attendance-history-list">
+                        <div
+                            v-for="record in attendanceHistory"
+                            :key="record.date"
+                            class="attendance-history-item"
+                        >
+                            <span>{{ formatTeamDate(record.date) }}</span>
+                            <span
+                                class="attendance-history-status"
+                                :class="attendanceStatusClass(record.status)"
+                            >{{ record.status }}</span>
+                        </div>
+                    </div>
+                    <div v-else class="attendance-history-empty">
+                        No attendance records for this month.
+                    </div>
                 </div>
                 <div class="attendance-action">
                     <Button
@@ -67,7 +99,6 @@
                         </template>
                         Check In
                     </Button>
-
                     <Button
                         v-else
                         variant="solid"
@@ -86,7 +117,6 @@
                         </template>
                         Check Out
                     </Button>
-
                     <p
                         v-if="attendanceMessage"
                         class="attendance-feedback"
@@ -107,7 +137,6 @@
                             {{ checkInTime || '--:--' }}
                         </span>
                     </div>
-
                     <div class="time-item">
                         <span class="time-label">
                             Check Out
@@ -119,38 +148,66 @@
                     </div>
                 </div>
             </section>
-            <!-- 3. WEEKLY WORKING HOURS -->
+            <!-- 3. WEEKLY HOURS -->
             <section class="toolbar-section weekly-section" data-tour="weekly-hours">
                 <div class="section-heading">
-                    <span class="section-icon">
-                        <Icon name="lucide-bar-chart-3" />
-                    </span>
-                    <span>Weekly Hours</span>
-                </div>
-                <div class="weekly-summary">
-                    <div class="weekly-total">
-                        <span class="weekly-hours">{{ totalHours }}</span>
-                        <span class="weekly-target">/ {{ weeklyTarget }} hrs</span>
-                    </div>
-                    <Button
-                        variant="subtle"
-                        theme="gray"
-                        size="sm"
-                        class="chart-trigger"
+                    <button
+                        type="button"
+                        class="section-icon weekly-chart-trigger"
                         title="View weekly working hours"
+                        aria-label="View weekly working hours"
                         @click="openWeeklyChart"
                     >
                         <Icon name="lucide-chart-no-axes-column" />
-                    </Button>
-                    <span class="weekly-percentage">
-                        {{ weeklyPercentage }}% completed
-                    </span>
+                    </button>
+                    <span>Weekly Hours</span>
                 </div>
-                <div class="weekly-progress-track">
-                    <div
-                        class="weekly-progress-fill"
-                        :style="{ width: `${weeklyPercentage}%` }"
-                    ></div>
+                <div class="weekly-progress-list">
+                    <div class="weekly-progress-row">
+                        <div class="weekly-row-summary">
+                            <span class="weekly-row-label">Check In / Out</span>
+                            <div class="weekly-row-total">
+                                <span class="weekly-hours">{{ attendanceHours }}</span>
+                                <span class="weekly-target">/ {{ attendanceTarget }} hrs</span>
+                            </div>
+                        </div>
+                        <div class="weekly-row-chart">
+                            <span class="weekly-percentage">{{ attendancePercentage }}% completed</span>
+                            <div class="weekly-progress-track">
+                                <div class="weekly-progress-fill" :style="{ width: `${attendancePercentage}%` }"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="weekly-progress-row">
+                        <div class="weekly-row-summary">
+                            <span class="weekly-row-label">Timesheet</span>
+                            <div class="weekly-row-total">
+                                <span class="weekly-hours">{{ timesheetHours }}</span>
+                                <span class="weekly-target">/ {{ timesheetTarget }} hrs</span>
+                            </div>
+                        </div>
+                        <div class="weekly-row-chart">
+                            <span class="weekly-percentage">{{ timesheetPercentage }}% completed</span>
+                            <div class="weekly-progress-track">
+                                <div class="weekly-progress-fill" :style="{ width: `${timesheetPercentage}%` }"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="weekly-progress-row">
+                        <div class="weekly-row-summary">
+                            <span class="weekly-row-label">Effective Hours</span>
+                            <div class="weekly-row-total">
+                                <span class="weekly-hours">{{ effectiveHours }}</span>
+                                <span class="weekly-target">/ {{ effectiveTarget }} hrs</span>
+                            </div>
+                        </div>
+                        <div class="weekly-row-chart">
+                            <span class="weekly-percentage">{{ effectivePercentage }}% completed</span>
+                            <div class="weekly-progress-track">
+                                <div class="weekly-progress-fill" :style="{ width: `${effectivePercentage}%` }"></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
             <!-- 4. QUICK ACCESS -->
@@ -396,15 +453,6 @@
                         <Icon name="lucide-x" />
                     </button>
                 </div>
-                <div class="chart-modal-summary">
-                    <div>
-                        <span class="modal-total">{{ totalHours }}</span>
-                        <span class="modal-target"> / {{ weeklyTarget }} hrs</span>
-                    </div>
-                    <Badge theme="green">
-                        {{ weeklyPercentage }}% completed
-                    </Badge>
-                </div>
                 <div class="modal-chart">
                     <div class="chart-y-axis" aria-hidden="true">
                         <span>10h</span>
@@ -429,21 +477,13 @@
                             :key="day.label"
                             class="modal-chart-day"
                         >
-                            <div class="modal-bar-area">
-                                <div
-                                    class="modal-chart-bar"
-                                    :class="{
-                                        'modal-chart-bar-today': day.today
-                                    }"
-                                    :style="{
-                                        height: `${(day.hours / 10) * 100}%`
-                                    }"
-                                    :title="`${day.hours.toFixed(1)} hours`"
-                                ></div>
+                            <div class="modal-bar-area" :title="`Check In / Out: ${day.attendanceHours.toFixed(1)}h | Timesheet: ${day.timesheetHours.toFixed(1)}h | Effective: ${day.effectiveHours.toFixed(1)}h`">
+                                <div class="modal-bar-stack">
+                                    <div class="modal-chart-bar modal-chart-bar-attendance" :class="{ 'modal-chart-bar-today': day.today }" :style="{ height: `${Math.min(day.attendanceHours, 10) / 10 * 100}%` }"></div>
+                                    <div class="modal-chart-bar modal-chart-bar-timesheet" :class="{ 'modal-chart-bar-today': day.today }" :style="{ height: `${Math.min(day.timesheetHours, 10) / 10 * 100}%` }"></div>
+                                    <div class="modal-chart-bar modal-chart-bar-effective" :class="{ 'modal-chart-bar-today': day.today }" :style="{ height: `${Math.min(day.effectiveHours, 10) / 10 * 100}%` }"></div>
+                                </div>
                             </div>
-                            <span class="modal-chart-hours">
-                                {{ day.hours.toFixed(1) }}h
-                            </span>
                             <span class="modal-chart-label">
                                 {{ day.label }}
                             </span>
@@ -451,11 +491,10 @@
                     </div>
                 </div>
                 <div class="chart-modal-footer">
-                    <span class="legend-dot"></span>
-                    <span>Daily productive hours</span>
-                    <span class="chart-target-note">
-                        Daily target: 9 hours
-                    </span>
+                    <span class="chart-legend-item"><span class="legend-dot legend-attendance"></span>Check In / Out</span>
+                    <span class="chart-legend-item"><span class="legend-dot legend-timesheet"></span>Timesheet</span>
+                    <span class="chart-legend-item"><span class="legend-dot legend-effective"></span>Effective</span>
+                    <span class="chart-target-note">Daily scale: 0–10 hrs</span>
                 </div>
             </section>
         </div>
@@ -626,23 +665,92 @@ async function recordAttendance(logType) {
         isAttendanceSubmitting.value = false
     }
 }
-// --------------------------------------------------
-// WEEKLY PRODUCTIVE HOURS
-// Uses timesheet_working_hours from submitted Timesheets.
+const showAttendanceHistory = ref(false)
+const attendanceHistory = ref([])
+const attendanceHistoryLoading = ref(false)
+const attendanceMonthLabel = ref('')
+async function toggleAttendanceHistory() {
+    showAttendanceHistory.value = !showAttendanceHistory.value
+    if (showAttendanceHistory.value && !attendanceHistory.value.length) {
+        await loadAttendanceHistory()
+    }
+}
+async function fetchFrappeList(doctype, fields, filters, orderBy = undefined) {
+    const params = new URLSearchParams({
+        doctype,
+        fields: JSON.stringify(fields),
+        filters: JSON.stringify(filters),
+        limit_page_length: '500',
+    })
+    if (orderBy) params.set('order_by', orderBy)
+    const response = await fetch(`/api/method/frappe.client.get_list?${params}`, {
+        credentials: 'same-origin',
+    })
+    const result = await response.json()
+    if (!response.ok || result.exc) throw new Error(result._server_messages || `Unable to load ${doctype}`)
+    return result.message || []
+}
+function attendanceStatusClass(status) {
+    return status === 'Present' ? 'is-present' : 'is-absent'
+}
+async function loadAttendanceHistory() {
+    attendanceHistoryLoading.value = true
+    attendanceHistory.value = []
+    try {
+        const now = new Date()
+        const year = now.getFullYear()
+        const month = now.getMonth()
+        const monthStart = `${year}-${String(month + 1).padStart(2, '0')}-01`
+        const today = `${year}-${String(month + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+        attendanceMonthLabel.value = now.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+        const attendanceRecords = await fetchFrappeList(
+            'Attendance',
+            ['name', 'attendance_date', 'status'],
+            { employee: employee.value.id, attendance_date: ['between', [monthStart, today]], docstatus: 1 },
+            'attendance_date asc'
+        )
+        attendanceHistory.value = attendanceRecords.map((record) => ({
+            date: record.attendance_date,
+            status: ['Present', 'Half Day', 'Work From Home'].includes(record.status)
+                ? 'Present'
+                : 'Absent',
+        }))
+    } catch (error) {
+        console.error('Failed to load attendance history:', error)
+        attendanceHistory.value = []
+    } finally {
+        attendanceHistoryLoading.value = false
+    }
+}
+// WEEKLY HOURS
+// All three categories use the weekly target configured in Compliance Settings.
+// The backend returns this value as weekly_target_hours.
 // --------------------------------------------------
 const weeklyData = ref([])
-const weeklyTarget = ref(0)
-const totalHours = ref('0.0')
+const attendanceHours = ref('0.0')
+const timesheetHours = ref('0.0')
+const effectiveHours = ref('0.0')
+const weeklyTarget = ref(45)
+const attendanceTarget = computed(() => weeklyTarget.value)
+const timesheetTarget = computed(() => weeklyTarget.value)
+const effectiveTarget = computed(() => weeklyTarget.value)
 const weeklyHoursResource = createResource({
     url: '/api/method/one_compliance.one_compliance.api.executive_dashboard.get_weekly_working_hours_analysis',
     auto: false,
 })
-const weeklyPercentage = computed(() => {
-    const target = Number(weeklyTarget.value) || 0
-    const total = Number(totalHours.value) || 0
-    if (target <= 0) return '0.0'
+function calculatePercentage(hours, target) {
+    const total = Number(hours) || 0
     return Math.min((total / target) * 100, 100).toFixed(1)
-})
+}
+const attendancePercentage = computed(() =>
+    calculatePercentage(attendanceHours.value, attendanceTarget.value)
+)
+const timesheetPercentage = computed(() =>
+    calculatePercentage(timesheetHours.value, timesheetTarget.value)
+)
+const effectivePercentage = computed(() =>
+    calculatePercentage(effectiveHours.value, effectiveTarget.value)
+)
 async function loadWeeklyHours() {
     try {
         const response = await weeklyHoursResource.fetch()
@@ -652,11 +760,16 @@ async function loadWeeklyHours() {
             return
         }
         const totals = result.totals || {}
-        weeklyTarget.value = 45
-        totalHours.value = Number(totals.timesheet_working_hours || 0).toFixed(1)
+        weeklyTarget.value = Number(result.weekly_target_hours || 45)
+        attendanceHours.value = Number(totals.working_hours || 0).toFixed(1)
+        timesheetHours.value = Number(totals.timesheet_working_hours || 0).toFixed(1)
+        effectiveHours.value = Number(totals.effective_hours || 0).toFixed(1)
+        // Keep all three daily hour types for the overlaid weekly chart.
         weeklyData.value = (result.daily || []).map((day) => ({
             label: day.day,
-            hours: Number(day.timesheet_working_hours || 0),
+            attendanceHours: Number(day.working_hours || 0),
+            timesheetHours: Number(day.timesheet_working_hours || 0),
+            effectiveHours: Number(day.effective_hours || 0),
             today: Boolean(day.is_today),
         }))
     } catch (error) {
@@ -714,8 +827,10 @@ async function loadTeamUpdates() {
 function handleOutsideMenuClick(event) {
     const clickedInsideHR = event.target.closest('.hr-menu-wrapper')
     const clickedInsideTeam = event.target.closest('.team-menu-wrapper')
+    const clickedInsideAttendance = event.target.closest('.attendance-section')
     if (!clickedInsideHR) showHRMenu.value = false
     if (!clickedInsideTeam) showTeamMenu.value = false
+    if (!clickedInsideAttendance) showAttendanceHistory.value = false
 }
 onMounted(() => {
     document.addEventListener('click', handleOutsideMenuClick)
@@ -725,7 +840,6 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
     document.removeEventListener('click', handleOutsideMenuClick)
-
     if (attendanceMessageTimeout) {
         clearTimeout(attendanceMessageTimeout)
         attendanceMessageTimeout = null
@@ -743,7 +857,6 @@ function openWeeklyChart() {
 function closeWeeklyChart() {
     showWeeklyChart.value = false
 }
-
 // --------------------------------------------------
 // aTTENDANCE FEEDBACK MESSAGE
 // --------------------------------------------------
@@ -752,10 +865,8 @@ function showAttendanceMessage(message, type) {
     if (attendanceMessageTimeout) {
         clearTimeout(attendanceMessageTimeout)
     }
-
     attendanceMessage.value = message
     attendanceMessageType.value = type
-
     // Automatically hide the message after 7 seconds.
     attendanceMessageTimeout = setTimeout(() => {
         attendanceMessage.value = ''
@@ -764,11 +875,9 @@ function showAttendanceMessage(message, type) {
 }
 </script>
 <style scoped>
-
 /* =========================================================
    EMPLOYEE DASHBOARD TOOLBAR — MODERN DESIGN
-========================================================= */
-
+\\========================================================= */
 .associate-dashboard {
     position: relative;
     width: 100%;
@@ -777,11 +886,9 @@ function showAttendanceMessage(message, type) {
     box-sizing: border-box;
     font-family: inherit;
 }
-
 /* =========================================================
    TOOLBAR GRID
-========================================================= */
-
+\\========================================================= */
 .associate-toolbar {
     position: relative;
     display: grid;
@@ -794,116 +901,91 @@ function showAttendanceMessage(message, type) {
     border: none;
     overflow: visible;
 }
-
 .associate-toolbar::after {
     content: "";
     position: absolute;
     bottom: 0;
-
     /* Extend beyond the toolbar's inner padding */
     left: -16px;
     width: calc(100% + 32px);
-
     height: 1px;
     background: #e2e8f0;
-
     /* Subtle shadow beneath the divider */
     box-shadow:
         0 3px 5px rgba(15, 23, 42, 0.12),
         0 6px 12px rgba(15, 23, 42, 0.08);
-
     pointer-events: none;
 }
-
 /* =========================================================
    INDIVIDUAL TOOLBAR CARDS
-========================================================= */
-
+\\========================================================= */
 .toolbar-section {
     position: relative;
     display: flex;
     flex-direction: column;
-
     min-width: 0;
     min-height: 158px;
-
     padding: 19px 20px;
     box-sizing: border-box;
-
     background: #ffffff;
     border: 1px solid #e5eaf0;
     border-radius: 4px;
-
     box-shadow:
         0 2px 5px rgba(15, 23, 42, 0.045),
         0 6px 16px rgba(15, 23, 42, 0.055),
         0 12px 28px rgba(15, 23, 42, 0.025);
-
     transition:
         border-color 0.2s ease,
         box-shadow 0.2s ease,
         transform 0.2s ease;
 }
-
 .toolbar-section:hover {
     border-color: #dce4ec;
     box-shadow:
         0 2px 5px rgba(15, 23, 42, 0.035),
         0 8px 20px rgba(15, 23, 42, 0.055);
     transform: translateY(-1px);
-
 }
-
 /* Keep Quick Access dropdowns above the toolbar divider */
 .quick-access-section:has(.hr-dropdown),
 .quick-access-section:has(.team-dropdown) {
     z-index: 1400;
 }
-
 /* =========================================================
    SECTION HEADINGS
-========================================================= */
-
+\\========================================================= */
 /* =========================================================
    SHARED SECTION HEADING STRUCTURE
-========================================================= */
-
+\\========================================================= */
 .section-heading {
     display: flex;
     align-items: center;
     gap: 11px;
-
     width: 100%;
     min-height: 38px;
     margin: 0 0 4px;
     padding: 0 0 13px;
-
     box-sizing: border-box;
-
     color: #1e293b;
     font-size: 14px;
     font-weight: 500;
     letter-spacing: -0.015em;
     line-height: 1.4;
 }
-
 .section-icon {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-
     width: 29px;
     height: 29px;
     padding: 4px;
     box-sizing: border-box;
     flex-shrink: 0;
-
     color: #334155;
     background: #eff6ff;
     border: 1px solid #dbeafe;
     border-radius: 4px;
 }
-
 /* Actual SVG styling */
 .section-icon :deep(svg) {
     width: 18px !important;
@@ -912,7 +994,6 @@ function showAttendanceMessage(message, type) {
     stroke: #334155 !important;
     opacity: 1 !important;
 }
-
 .section-icon :deep(svg path),
 .section-icon :deep(svg line),
 .section-icon :deep(svg circle),
@@ -923,21 +1004,18 @@ function showAttendanceMessage(message, type) {
 }
 /* =========================================================
    1. EMPLOYEE PROFILE
-========================================================= */
-
+\\========================================================= */
 .employee-profile {
     display: flex;
     align-items: center;
     gap: 26px;
     min-height: 56px;
 }
-
 .employee-avatar {
     width: 56px;
     height: 56px;
     flex: 0 0 56px;
 }
-
 .employee-avatar :deep(> *) {
     width: 100% !important;
     height: 100% !important;
@@ -946,20 +1024,17 @@ function showAttendanceMessage(message, type) {
     border: 2px solid #f1f5f9;
     box-sizing: border-box;
 }
-
 /* Placeholder letter */
 .employee-avatar :deep(.text-2xl) {
     font-size: 37px !important;
     line-height: 1 !important;
 }
-
 .employee-details {
     display: flex;
     flex-direction: column;
     gap: 4px;
     min-width: 0;
 }
-
 .employee-details h3 {
     margin: 0;
     color: #172033;
@@ -968,23 +1043,19 @@ function showAttendanceMessage(message, type) {
     line-height: 1.35;
     overflow-wrap: anywhere;
 }
-
 .employee-id {
     color: #94a3b8;
     font-size: 11px;
     font-weight: 500;
     letter-spacing: 0.025em;
 }
-
 .employee-designation-badge {
     align-self: flex-start;
     margin-top: 4px;
 }
-
 .employee-designation-badge :deep(*) {
     font-size: 10px;
 }
-
 .profile-footer {
     display: flex;
     align-items: center;
@@ -993,18 +1064,15 @@ function showAttendanceMessage(message, type) {
     margin-top: auto;
     padding-top: 13px;
 }
-
 .profile-status {
     display: inline-flex;
     align-items: center;
     gap: 7px;
     margin-left: auto;
-
     color: #64748b;
     font-size: 11px;
     font-weight: 500;
 }
-
 .status-dot {
     width: 7px;
     height: 7px;
@@ -1013,11 +1081,9 @@ function showAttendanceMessage(message, type) {
     box-shadow: 0 0 0 3px #dcfce7;
     flex-shrink: 0;
 }
-
 /* =========================================================
    2. ATTENDANCE
-========================================================= */
-
+\\========================================================= */
 .attendance-action {
     display: flex;
     align-items: center;
@@ -1025,7 +1091,6 @@ function showAttendanceMessage(message, type) {
     gap: 10px;
     min-height: 40px;
 }
-
 .attendance-button {
     min-width: 112px;
     min-height: 34px;
@@ -1035,21 +1100,16 @@ function showAttendanceMessage(message, type) {
     font-size: 12px;
     font-weight: 600;
 }
-
-
-
 .attendance-button :deep(.attendance-arrow-icon) {
     width: 17px !important;
     height: 17px !important;
     flex-shrink: 0;
 }
-
 .attendance-action :deep(.badge) {
     border-radius: 20px;
     font-size: 10px;
     font-weight: 550;
 }
-
 .attendance-times {
     display: flex;
     align-items: stretch;
@@ -1057,7 +1117,6 @@ function showAttendanceMessage(message, type) {
     margin-top: auto;
     padding-top: 13px;
 }
-
 .time-item {
     display: flex;
     flex: 1;
@@ -1071,21 +1130,18 @@ function showAttendanceMessage(message, type) {
     border-radius: 7px;
     box-shadow: 0 2px 5px rgba(15, 23, 42, 0.06);
 }
-
 .time-value {
     color: #263449;
     font-size: 13px;
     font-weight: 400;
     font-variant-numeric: tabular-nums;
 }
-
 .time-value {
     color: #263449;
     font-size: 13px;
     font-weight: 400;
     font-variant-numeric: tabular-nums;
 }
-
 .time-divider {
     width: 1px;
     height: 29px;
@@ -1093,7 +1149,6 @@ function showAttendanceMessage(message, type) {
     background: #e8edf2;
     flex-shrink: 0;
 }
-
 .attendance-feedback {
     flex: 1;
     min-width: 0;
@@ -1105,21 +1160,17 @@ function showAttendanceMessage(message, type) {
 .attendance-feedback.success {
     color: #15803d;
 }
-
 .attendance-feedback.error {
     color: #dc2626;
 }
-
 .attendance-status-badge {
     margin-left: auto;
     flex-shrink: 0;
 }
-
 .attendance-status-badge :deep(*) {
     font-size: 10px;
     font-weight: 500;
 }
-
 .time-label {
     display: inline-flex;
     flex-direction: row;
@@ -1128,124 +1179,210 @@ function showAttendanceMessage(message, type) {
     white-space: nowrap;
     font-size: 11px;
 }
-
 .time-label :deep(svg) {
     width: 15px;
     height: 15px;
     flex-shrink: 0;
 }
+.attendance-history-trigger {
+    border: none;
+    cursor: pointer;
+    font: inherit;
+}
+.attendance-history-trigger:hover {
+    background: #dbeafe;
+}
+/* Keep the open dropdown above adjacent dashboard cards. */
+.attendance-section:has(.attendance-history-dropdown) {
+    z-index: 1500;
+}
+.attendance-history-dropdown {
+    position: absolute;
+    top: 58px;
+    left: 20px;
+    z-index: 1501;
+    width: 290px;
+    max-width: calc(100vw - 40px);
+    background: #ffffff;
+    border: 1px solid #e5eaf0;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+    overflow: hidden;
+}
+.attendance-history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    border-bottom: 1px solid #edf0f4;
+    font-size: 12px;
+    font-weight: 450;
+    color: #1e293b;
+}
+
+.attendance-history-header span {
+    font-size: 12px;
+    font-weight: 450;
+    color: #1e293b;
+    white-space: nowrap;
+}
+.attendance-history-list {
+    max-height: 280px;
+    overflow-y: auto;
+}
+.attendance-history-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    
+    padding: 11px 12px;
+    border-bottom: 1px solid #f1f5f9;
+}
+.attendance-history-item:last-child {
+    border-bottom: 0;
+}
+.attendance-history-item span {
+    font-size: 11px;
+    font-weight: 450;
+    color: #334155;
+}
+.attendance-history-item span {
+    font-size: 11px;
+    font-weight: 450;
+    color: #334155;
+}
+
+.attendance-history-status {
+    font-size: 10px;
+    font-weight: 450;
+    text-align: right;
+}
+
+.attendance-history-status.is-present {
+    color: #15803d;
+}
+
+.attendance-history-status.is-absent {
+    color: #dc2626;
+}
+
+.attendance-history-empty {
+    padding: 22px 12px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 450;
+    color: #94a3b8;
+}
 /* =========================================================
    3. WEEKLY HOURS
-========================================================= */
-
-.weekly-summary {
-    display: flex;
+\\========================================================= */
+.weekly-section {
+    min-width: 0;
+}
+.weekly-section .section-heading {
     align-items: center;
-    flex-wrap: nowrap;
-    gap: 7px;
-    width: 100%;
-    min-height: 38px;
-    margin-top: 1px;
 }
-
-.weekly-total {
-    display: flex;
-    align-items: baseline;
-    gap: 5px;
+.weekly-section .weekly-chart-trigger {
     flex-shrink: 0;
-}
-
-.weekly-hours {
-    color: #172033;
-    font-size: 27px;
-    line-height: 1.2;
-    font-weight: 550;
-    letter-spacing: -1px;
-    font-variant-numeric: tabular-nums;
-}
-
-.weekly-target {
-    color: #94a3b8;
-    font-size: 13px;
-    font-weight: 500;
-}
-
-.chart-trigger {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 29px;
-    height: 29px;
-    min-width: 29px;
-    flex-shrink: 0;
-    margin-left: 2px;
-    padding: 4px;
-    background: #ffffff;
-    color: #334155;
     border: 1px solid #dbeafe;
-    border-radius: 4px;
-    box-shadow: none;
+    cursor: pointer;
+    transition: background 0.2s ease;
 }
 
-.chart-trigger:hover {
-    background: #f8fafc;
-    color: #334155;
+.weekly-section .weekly-chart-trigger:hover {
+    background: #dbeafe;
 }
 
-.chart-trigger :deep(svg) {
-    display: block;
-    width: 17px;
-    height: 17px;
-    margin: 0;
-    flex-shrink: 0;
-    color: #334155;
-    stroke: #334155;
+.weekly-section .weekly-chart-trigger:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
 }
-
-.chart-trigger :deep(.button-content) {
+.weekly-progress-list {
     display: flex;
-    align-items: center;
-    justify-content: center;
+    flex-direction: column;
+    gap: 13px;
     width: 100%;
-    height: 100%;
-    margin: 0;
+    margin-top: 2px;
 }
-
-.weekly-percentage {
-    margin-left: auto;
+.weekly-progress-row {
+    display: grid;
+    grid-template-columns: 88px minmax(0, 1fr);
+    align-items: end;
+    gap: 6px;
+    min-width: 0;
+}
+.weekly-row-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+    padding-bottom: 1px;
+}
+.weekly-row-label {
     color: #64748b;
-    font-size: 12px;
+    font-size: 10px;
     font-weight: 550;
     white-space: nowrap;
 }
-
+.weekly-row-total {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    min-width: 0;
+    white-space: nowrap;
+}
+.weekly-hours {
+    color: #172033;
+    font-size: 12px;
+    line-height: 1.2;
+    font-weight: 550;
+    letter-spacing: -0.5px;
+    font-variant-numeric: tabular-nums;
+}
+.weekly-target {
+    color: #94a3b8;
+    font-size: 10px;
+    font-weight: 500;
+}
+.weekly-row-chart {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 5px;
+    min-width: 0;
+}
+.weekly-percentage {
+    align-self: flex-end;
+    color: #64748b;
+    font-size: 10px;
+    font-weight: 550;
+    line-height: 1.2;
+    white-space: nowrap;
+}
 .weekly-progress-track {
     width: 100%;
     height: 6px;
-    margin-top: 14px;
     overflow: hidden;
     background: #edf1f5;
     border-radius: 20px;
 }
-
 .weekly-progress-fill {
     height: 100%;
     background: linear-gradient(90deg, #16a34a, #22c55e);
     border-radius: inherit;
     transition: width 0.35s ease;
 }
-
 /* =========================================================
    4. QUICK ACCESS
-========================================================= */
-
+\\========================================================= */
 .quick-access-list {
     display: flex;
     flex-direction: column;
     gap: 4px;
     margin-top: -5px;
 }
-
 .quick-access-button {
     display: flex;
     align-items: center;
@@ -1258,124 +1395,100 @@ function showAttendanceMessage(message, type) {
     font-size: 12px;
     font-weight: 500;
     transition:
-        background 0.15s ease,
+background 0.15s ease,
         color 0.15s ease;
 }
-
 .quick-access-button:hover {
     background: #f1f5f9;
     color: #172033;
 }
-
 .quick-access-button :deep(.button-content) {
     flex: 1;
 }
-
 .quick-access-button :deep(.suffix) {
     margin-left: auto;
 }
-
 .quick-access-button :deep(svg) {
     width: 15px;
     height: 15px;
 }
-
 /* =========================================================
    HR DROPDOWN
-========================================================= */
-
+\\========================================================= */
 .hr-menu-wrapper,
 .team-menu-wrapper {
     position: relative;
     width: 100%;
 }
-
 .hr-menu-trigger,
 .team-menu-trigger {
     width: 100%;
     justify-content: flex-start;
 }
-
 .hr-dropdown {
     position: absolute;
     top: calc(100% + 7px);
     left: 0;
     right: auto;
     z-index: 1200;
-
     width: 220px;
     padding: 6px;
     box-sizing: border-box;
-
     background: #ffffff;
     border: 1px solid #e8edf2;
     border-radius: 10px;
-
     box-shadow:
         0 4px 8px rgba(15, 23, 42, 0.06),
         0 14px 32px rgba(15, 23, 42, 0.12);
 }
-
 .hr-dropdown-item {
     display: flex;
     align-items: center;
     gap: 11px;
     width: 100%;
     padding: 10px 11px;
-
     border: none;
     border-radius: 7px;
     background: transparent;
-
     color: #475569;
     font-family: inherit;
     font-size: 12px;
     font-weight: 500;
     text-align: left;
-
     cursor: pointer;
     transition: background 0.15s ease, color 0.15s ease;
 }
-
 .hr-dropdown-item:hover {
     background: #f1f5f9;
     color: #172033;
 }
-
 .hr-dropdown-item :deep(svg) {
     width: 16px;
     height: 16px;
     color: #94a3b8;
     flex-shrink: 0;
 }
-
 /* =========================================================
    TEAM DROPDOWN
-========================================================= */
-
+\\========================================================= */
 .team-dropdown {
     position: absolute;
     top: calc(100% + 7px);
     left: 0;
     right: auto;
     z-index: 1300;
-
     width: 350px;
     max-width: min(350px, calc(100vw - 30px));
     padding: 0;
-
     color: #263449;
     background: #ffffff;
     border: 1px solid #e8edf2;
     border-radius: 11px;
-
     box-shadow:
         0 4px 8px rgba(15, 23, 42, 0.06),
         0 14px 32px rgba(15, 23, 42, 0.12);
-
     overflow: hidden;
 }
-
 .team-dropdown-header {
     display: flex;
     align-items: center;
@@ -1383,33 +1496,28 @@ function showAttendanceMessage(message, type) {
     padding: 15px 16px;
     border-bottom: 1px solid #edf0f4;
 }
-
 .team-dropdown-header h4 {
     margin: 0;
     color: #1e293b;
     font-size: 13px;
     font-weight: 650;
 }
-
 .team-dropdown-header p {
     margin: 4px 0 0;
     color: #94a3b8;
     font-size: 10px;
 }
-
 .team-dropdown-header > :deep(svg) {
     width: 19px;
     height: 19px;
     color: #94a3b8;
 }
-
 .team-tabs {
     display: flex;
     gap: 4px;
     padding: 0 12px;
     border-bottom: 1px solid #edf0f4;
 }
-
 .team-tab {
     display: flex;
     align-items: center;
@@ -1418,32 +1526,26 @@ function showAttendanceMessage(message, type) {
     min-width: 0;
     gap: 6px;
     padding: 12px 5px;
-
     border: 0;
     border-bottom: 2px solid transparent;
     background: transparent;
-
     color: #94a3b8;
     font-size: 10px;
     font-weight: 550;
     white-space: nowrap;
-
     cursor: pointer;
     transition: color 0.15s ease, border-color 0.15s ease;
 }
-
 .team-tab.active {
     color: #15803d;
     border-bottom-color: #16a34a;
     font-weight: 650;
 }
-
 .team-tab > :deep(svg) {
     width: 14px;
     height: 14px;
     flex-shrink: 0;
 }
-
 .team-tab span {
     display: inline-flex;
     align-items: center;
@@ -1456,13 +1558,11 @@ function showAttendanceMessage(message, type) {
     color: #64748b;
     font-size: 9px;
 }
-
 .team-dropdown-list {
     max-height: 270px;
     overflow-y: auto;
     overflow-x: hidden;
 }
-
 .team-update-item {
     display: flex;
     align-items: center;
@@ -1471,15 +1571,12 @@ function showAttendanceMessage(message, type) {
     border-bottom: 1px solid #f1f5f9;
     transition: background 0.15s ease;
 }
-
 .team-update-item:hover {
     background: #fafbfc;
 }
-
 .team-update-item:last-child {
     border-bottom: 0;
 }
-
 .team-update-content {
     display: flex;
     flex: 1;
@@ -1487,23 +1584,19 @@ function showAttendanceMessage(message, type) {
     flex-direction: column;
     gap: 4px;
 }
-
 .team-update-content strong {
     color: #334155;
     font-size: 11px;
     font-weight: 600;
 }
-
 .team-update-content span {
     color: #64748b;
     font-size: 10px;
 }
-
 .team-update-content small {
     color: #94a3b8;
     font-size: 9px;
 }
-
 .team-date-icon {
     display: flex;
     align-items: center;
@@ -1513,22 +1606,18 @@ function showAttendanceMessage(message, type) {
     flex-shrink: 0;
     border-radius: 10px;
 }
-
 .team-date-icon :deep(svg) {
     width: 19px;
     height: 19px;
 }
-
 .birthday-icon {
     color: #db2777;
     background: #fdf2f8;
 }
-
 .event-icon {
     color: #2563eb;
     background: #eff6ff;
 }
-
 .team-empty-state {
     display: flex;
     flex-direction: column;
@@ -1541,51 +1630,41 @@ function showAttendanceMessage(message, type) {
     font-size: 11px;
     text-align: center;
 }
-
 .team-empty-state :deep(svg) {
     width: 23px;
     height: 23px;
 }
-
 /* =========================================================
    WEEKLY HOURS CHART MODAL
-========================================================= */
-
+\\========================================================= */
 .chart-modal-backdrop {
     position: fixed;
     inset: 0;
     z-index: 9999;
-
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 20px;
-
     background: rgba(15, 23, 42, 0.55);
     backdrop-filter: blur(3px);
 }
-
 .chart-modal {
     box-sizing: border-box;
     width: 100%;
-    max-width: 640px;
-    padding: 25px;
-
+    max-width: 780px;
+    padding: 34px;
     color: #263449;
     background: #ffffff;
     border: 1px solid #e8edf2;
     border-radius: 14px;
-
     box-shadow: 0 20px 60px rgba(15, 23, 42, 0.2);
 }
-
 .chart-modal-header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 16px;
 }
-
 .chart-modal-header h3 {
     margin: 0;
     color: #172033;
@@ -1593,13 +1672,11 @@ function showAttendanceMessage(message, type) {
     line-height: 1.4;
     font-weight: 650;
 }
-
 .chart-modal-header p {
     margin: 5px 0 0;
     color: #94a3b8;
     font-size: 12px;
 }
-
 .chart-close-button {
     display: inline-flex;
     align-items: center;
@@ -1607,51 +1684,66 @@ function showAttendanceMessage(message, type) {
     width: 32px;
     height: 32px;
     padding: 0;
-
     color: #64748b;
     background: #f1f5f9;
     border: 0;
     border-radius: 8px;
-
     cursor: pointer;
     transition: background 0.15s ease;
 }
-
 .chart-close-button:hover {
     background: #e2e8f0;
 }
-
 .chart-close-button :deep(svg) {
     width: 16px;
     height: 16px;
 }
-
 .chart-modal-summary {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-top: 22px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 28px;
 }
-
+.chart-summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border: 1px solid #edf0f4;
+    border-radius: 8px;
+}
+.chart-summary-label {
+    color: #64748b;
+    font-size: 10px;
+}
+.chart-summary-value {
+    color: #172033;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+.chart-summary-percentage {
+    color: #64748b;
+    font-size: 10px;
+}
 .modal-total {
     color: #172033;
     font-size: 27px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
 }
-
 .modal-target {
     color: #94a3b8;
     font-size: 13px;
 }
-
 .modal-chart {
     display: flex;
-    height: 250px;
-    margin-top: 25px;
+    box-sizing: border-box;
+    height: 300px;
+    margin-top: 32px;
+    padding: 14px 12px 0;
 }
-
 .chart-y-axis {
     box-sizing: border-box;
     width: 38px;
@@ -1665,7 +1757,6 @@ function showAttendanceMessage(message, type) {
     line-height: 1;
     color: #94a3b8;
 }
-
 .modal-chart-content {
     position: relative;
     flex: 1;
@@ -1674,7 +1765,6 @@ function showAttendanceMessage(message, type) {
     justify-content: space-around;
     gap: 12px;
 }
-
 .chart-grid-lines {
     position: absolute;
     inset: 0 0 31px;
@@ -1683,13 +1773,11 @@ function showAttendanceMessage(message, type) {
     justify-content: space-between;
     pointer-events: none;
 }
-
 .chart-grid-lines span {
     display: block;
     width: 100%;
     border-top: 1px solid #edf0f4;
 }
-
 .modal-chart-day {
     position: relative;
     z-index: 1;
@@ -1699,7 +1787,6 @@ function showAttendanceMessage(message, type) {
     flex-direction: column;
     align-items: center;
 }
-
 .modal-bar-area {
     box-sizing: border-box;
     width: 100%;
@@ -1707,21 +1794,27 @@ function showAttendanceMessage(message, type) {
     display: flex;
     align-items: flex-end;
     justify-content: center;
+    cursor: default;
 }
-
+.modal-bar-stack {
+    position: relative;
+    width: min(42px, 70%);
+    height: 100%;
+}
 .modal-chart-bar {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
     display: block;
-    width: min(42px, 65%);
     min-height: 0;
-    background: #bbdfc8;
-    border-radius: 6px 6px 0 0;
+    border-radius: 5px 5px 0 0;
     transition: height 0.3s ease;
 }
-
-.modal-chart-bar-today {
-    background: #16a34a;
-}
-
+.modal-chart-bar-attendance { background: rgba(59, 130, 246, 0.58); }
+.modal-chart-bar-timesheet { background: rgba(22, 163, 74, 0.58); }
+.modal-chart-bar-effective { background: rgba(139, 92, 246, 0.58); }
+.modal-chart-bar-today { filter: saturate(1.25); }
 .modal-chart-hours {
     box-sizing: border-box;
     height: 19px;
@@ -1732,86 +1825,99 @@ function showAttendanceMessage(message, type) {
     font-weight: 600;
     white-space: nowrap;
 }
-
 .modal-chart-label {
     height: 12px;
+    margin-top: 8px;
     color: #94a3b8;
     font-size: 11px;
     line-height: 1;
 }
-
 .chart-modal-footer {
     display: flex;
     align-items: center;
-    gap: 7px;
-    margin-top: 15px;
-    padding-top: 13px;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 24px;
+    padding-top: 18px;
     border-top: 1px solid #edf0f4;
-    color: #94a3b8;
+    color: #64748b;
     font-size: 11px;
 }
-
-.chart-modal-footer .legend-dot {
-    background: #16a34a;
-}
-
-.legend-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    flex-shrink: 0;
-}
-
+.chart-legend-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.legend-attendance { background: #3b82f6; }
+.legend-timesheet { background: #16a34a; }
+.legend-effective { background: #8b5cf6; }
 .chart-target-note {
     margin-left: auto;
 }
-
 /* =========================================================
    RESPONSIVE LAYOUT
-========================================================= */
-
+\\========================================================= */
 @media (max-width: 1100px) {
     .associate-toolbar {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
-
 @media (max-width: 600px) {
+    .weekly-progress-row {
+        grid-template-columns: 88px minmax(0, 1fr);
+        gap: 6px;
+    }
+    .weekly-hours {
+        font-size: 17px;
+    }
+    .weekly-row-label,
+    .weekly-percentage {
+        font-size: 9px;
+    }
+    .weekly-progress-row {
+        grid-template-columns: 88px minmax(0, 1fr);
+        gap: 6px;
+    }
+    .weekly-hours {
+        font-size: 17px;
+    }
+    .weekly-row-label,
+    .weekly-percentage {
+        font-size: 9px;
+    }
     .associate-dashboard {
         padding: 10px 10px 0;
     }
-
     .associate-toolbar {
         grid-template-columns: minmax(0, 1fr);
         gap: 12px;
         padding-bottom: 14px;
     }
-
     .toolbar-section {
         min-height: 145px;
         padding: 15px;
     }
-
     .chart-modal-backdrop {
         padding: 12px;
     }
-
     .chart-modal {
-        padding: 19px 14px;
+        max-width: 100%;
+        padding: 24px 18px;
         border-radius: 12px;
     }
-
     .modal-chart {
-        height: 210px;
+        height: 230px;
+        margin-top: 24px;
+        padding: 10px 4px 0;
     }
-
+    .chart-modal-summary {
+        gap: 8px;
+        margin-top: 22px;
+    }
+    .chart-summary-item { padding: 8px 6px; }
+    .chart-summary-value { font-size: 11px; }
     .chart-target-note {
         font-size: 10px;
     }
-
     .team-dropdown {
         width: min(350px, calc(100vw - 30px));
     }
 }
-
 </style>

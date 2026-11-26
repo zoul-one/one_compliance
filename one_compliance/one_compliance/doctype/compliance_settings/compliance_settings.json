@@ -34,6 +34,8 @@
   "task_template_series",
   "column_break_kqmy",
   "ignore_dependent_task_validation",
+  "weekly_hours_settings_section",
+  "weekly_target_hours",
   "project_settings_section",
   "enable_common_project_extension",
   "overdue_extension_days",
@@ -515,6 +517,19 @@
    "fieldname": "enable_common_project_extension",
    "fieldtype": "Check",
    "label": "Enable Common Project Extension"
+  },
+  {
+   "fieldname": "weekly_hours_settings_section",
+   "fieldtype": "Section Break",
+   "label": "Weekly Hours Settings"
+  },
+  {
+   "default": "45",
+   "description": "Fixed weekly target used to track Check In / Out, Timesheet, and Effective Hours. Tracking resets every Monday.",
+   "fieldname": "weekly_target_hours",
+   "fieldtype": "Float",
+   "label": "Weekly Target Hours",
+   "non_negative": 1
   }
  ],
  "index_web_pages_for_search": 1,
